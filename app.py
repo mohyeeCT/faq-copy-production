@@ -12,6 +12,36 @@ from utils.keyword import select_keyword
 from utils.copy_gen import generate_faq, build_faq_schema
 from utils.scraper import scrape_page_context
 
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _empty_result(
+    url: str,
+    status: str,
+    num_faqs: int,
+    keyword: str = None,
+    source: str = None,
+    scrape_status: str = "skipped"
+) -> dict:
+    r = {
+        "url": url,
+        "selected_keyword": keyword,
+        "keyword_source": source,
+        "runner_up": None,
+        "kw_volume": None,
+        "kw_difficulty": None,
+        "scrape_status": scrape_status,
+        "paa_count": 0,
+        "faq_count": 0,
+        "faq_schema_jsonld": "",
+        "status": status,
+    }
+    for idx in range(1, num_faqs + 1):
+        r[f"faq_{idx}_question"] = ""
+        r[f"faq_{idx}_answer"] = ""
+    return r
+
+
 # ── Page config ───────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -590,31 +620,3 @@ if "results_df" in st.session_state:
                         "Common cause: service account does not have Editor access to the sheet."
                     )
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _empty_result(
-    url: str,
-    status: str,
-    num_faqs: int,
-    keyword: str = None,
-    source: str = None,
-    scrape_status: str = "skipped"
-) -> dict:
-    r = {
-        "url": url,
-        "selected_keyword": keyword,
-        "keyword_source": source,
-        "runner_up": None,
-        "kw_volume": None,
-        "kw_difficulty": None,
-        "scrape_status": scrape_status,
-        "paa_count": 0,
-        "faq_count": 0,
-        "faq_schema_jsonld": "",
-        "status": status,
-    }
-    for idx in range(1, num_faqs + 1):
-        r[f"faq_{idx}_question"] = ""
-        r[f"faq_{idx}_answer"] = ""
-    return r
