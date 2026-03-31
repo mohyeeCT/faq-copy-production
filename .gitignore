@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.env
+*.json
+!example_service_account.json
+.streamlit/secrets.toml
+.streamlit/
+*.egg-info/
+dist/
+build/
+.DS_Store
