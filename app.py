@@ -68,15 +68,10 @@ with st.sidebar:
     dfs_password = st.text_input("Password", type="password")
 
     st.divider()
-    st.subheader("FireCrawl")
-    firecrawl_key = st.text_input(
-        "FireCrawl API Key", type="password",
-        help="Used to scrape page content for topic context. Get yours at firecrawl.dev."
-    )
     enable_scraping = st.toggle(
         "Enable page scraping",
         value=True,
-        help="Scrapes ~50% of each page to ground FAQs in actual page content. Disable to skip scraping and rely on keyword + PAA only."
+        help="Scrapes ~50% of each page to ground FAQs in actual page content. Disable to rely on keyword + PAA only."
     )
 
     st.divider()
@@ -321,14 +316,10 @@ if "df" in st.session_state:
         "df" in st.session_state
     )
 
-    if enable_scraping and not firecrawl_key:
-        st.warning("FireCrawl API key is required when page scraping is enabled. Add it in the sidebar or disable scraping.")
-
     if not ready:
         st.warning("Complete all credentials and settings in the sidebar before running.")
 
-    run_disabled = not ready or (enable_scraping and not firecrawl_key)
-    run_btn = st.button("Generate FAQs", type="primary", disabled=run_disabled)
+    run_btn = st.button("Generate FAQs", type="primary", disabled=not ready)
 
     if run_btn:
         df_work = st.session_state["df"].copy()
@@ -382,9 +373,9 @@ if "df" in st.session_state:
             # Step 1: Scrape page for topic context
             page_context = ""
             scrape_status = "skipped"
-            if enable_scraping and firecrawl_key:
+            if enable_scraping:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: scraping page...")
-                scrape_result = scrape_page_context(firecrawl_key, url, max_chars=2000)
+                scrape_result = scrape_page_context(url, max_chars=2000)
                 if scrape_result["success"]:
                     page_context = scrape_result["content"]
                     scrape_status = f"ok ({len(page_context)} chars)"
