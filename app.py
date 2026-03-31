@@ -9,7 +9,8 @@ from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_people_also_ask
 from utils.keyword import select_keyword
-from utils.copy_gen import generate_faq
+from utils.copy_gen import generate_faq, build_faq_schema
+from utils.scraper import scrape_page_context
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
@@ -35,6 +36,18 @@ with st.sidebar:
     st.subheader("DataForSEO")
     dfs_login = st.text_input("Login (email)", type="default")
     dfs_password = st.text_input("Password", type="password")
+
+    st.divider()
+    st.subheader("FireCrawl")
+    firecrawl_key = st.text_input(
+        "FireCrawl API Key", type="password",
+        help="Used to scrape page content for topic context. Get yours at firecrawl.dev."
+    )
+    enable_scraping = st.toggle(
+        "Enable page scraping",
+        value=True,
+        help="Scrapes ~50% of each page to ground FAQs in actual page content. Disable to skip scraping and rely on keyword + PAA only."
+    )
 
     st.divider()
     st.subheader("AI Provider")
@@ -278,10 +291,14 @@ if "df" in st.session_state:
         "df" in st.session_state
     )
 
+    if enable_scraping and not firecrawl_key:
+        st.warning("FireCrawl API key is required when page scraping is enabled. Add it in the sidebar or disable scraping.")
+
     if not ready:
         st.warning("Complete all credentials and settings in the sidebar before running.")
 
-    run_btn = st.button("Generate FAQs", type="primary", disabled=not ready)
+    run_disabled = not ready or (enable_scraping and not firecrawl_key)
+    run_btn = st.button("Generate FAQs", type="primary", disabled=run_disabled)
 
     if run_btn:
         df_work = st.session_state["df"].copy()
@@ -332,7 +349,20 @@ if "df" in st.session_state:
                 if h1_raw and h1_raw.lower() != "none":
                     h1_value = h1_raw
 
-            # Priority 1: manual keyword from sheet
+            # Step 1: Scrape page for topic context
+            page_context = ""
+            scrape_status = "skipped"
+            if enable_scraping and firecrawl_key:
+                progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: scraping page...")
+                scrape_result = scrape_page_context(firecrawl_key, url, max_chars=2000)
+                if scrape_result["success"]:
+                    page_context = scrape_result["content"]
+                    scrape_status = f"ok ({len(page_context)} chars)"
+                else:
+                    scrape_status = f"failed: {scrape_result['error'][:80]}"
+                    # Non-fatal: continue with keyword + PAA only
+
+            # Step 2: Keyword selection
             manual_kw = str(row.get(keyword_col, "")).strip() if keyword_col != "(none)" else ""
             selected_keyword = None
             keyword_source = None
@@ -384,7 +414,6 @@ if "df" in st.session_state:
                         kw_volume = result["selected_keyword_data"]["volume"] if result["selected_keyword_data"] else None
                         kw_difficulty = result["selected_keyword_data"]["difficulty"] if result["selected_keyword_data"] else None
                     else:
-                        # GSC-only fallback: top query by impressions, excluding branded
                         non_branded = [
                             q for q in gsc_queries
                             if not any(b in q["query"].lower() for b in branded_terms)
@@ -406,13 +435,13 @@ if "df" in st.session_state:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: skipped ({keyword_source})")
                 continue
 
-            # Fetch PAA questions for the selected keyword
+            # Step 3: Fetch PAA
             progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: fetching PAA for '{selected_keyword}'...")
             paa_questions = get_people_also_ask(
                 dfs_login, dfs_password, selected_keyword, location_code=int(location_code)
             )
 
-            # Generate FAQ
+            # Step 4: Generate FAQ
             progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: generating FAQs...")
             try:
                 faq_items = generate_faq(
@@ -428,7 +457,10 @@ if "df" in st.session_state:
                     forbidden_phrases="\n".join(
                         p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
                     ),
+                    page_context=page_context,
                 )
+
+                schema_jsonld = build_faq_schema(faq_items, page_url=url)
 
                 row_result = {
                     "url": url,
@@ -437,13 +469,13 @@ if "df" in st.session_state:
                     "runner_up": runner_up_kw,
                     "kw_volume": kw_volume,
                     "kw_difficulty": kw_difficulty,
+                    "scrape_status": scrape_status,
                     "paa_count": len(paa_questions),
                     "faq_count": len(faq_items),
-                    "faq_json": json.dumps(faq_items, ensure_ascii=False),
+                    "faq_schema_jsonld": schema_jsonld,
                     "status": "ok"
                 }
 
-                # Flatten Q/A pairs into individual columns
                 for idx in range(num_faqs):
                     if idx < len(faq_items):
                         row_result[f"faq_{idx + 1}_question"] = faq_items[idx]["question"]
@@ -456,7 +488,11 @@ if "df" in st.session_state:
 
             except Exception as e:
                 skipped.append({"row": i + 2, "reason": str(e)})
-                results.append(_empty_result(url, f"error: {str(e)}", num_faqs, keyword=selected_keyword, source=keyword_source))
+                results.append(_empty_result(
+                    url, f"error: {str(e)}", num_faqs,
+                    keyword=selected_keyword, source=keyword_source,
+                    scrape_status=scrape_status
+                ))
 
             time.sleep(_rate_delays.get(ai_provider, 0.5))
 
@@ -486,13 +522,11 @@ if "results_df" in st.session_state:
     m2.metric("Generated", ok_count)
     m3.metric("Skipped / Errors", skip_count)
 
-    # Summary table: URL + keyword + faq_count + status
-    summary_cols = ["url", "selected_keyword", "keyword_source", "paa_count", "faq_count", "status"]
+    summary_cols = ["url", "selected_keyword", "keyword_source", "scrape_status", "paa_count", "faq_count", "status"]
     available_summary = [c for c in summary_cols if c in results_df.columns]
     st.subheader("Summary")
     st.dataframe(results_df[available_summary], use_container_width=True, height=300)
 
-    # FAQ detail expanders
     st.subheader("FAQ Preview")
     for _, row in results_df.iterrows():
         if row.get("status") != "ok":
@@ -505,6 +539,10 @@ if "results_df" in st.session_state:
                     st.markdown(f"**Q{idx}: {q}**")
                     st.write(a)
                     st.divider()
+
+            if row.get("faq_schema_jsonld"):
+                with st.expander("Schema.org JSON-LD"):
+                    st.code(row["faq_schema_jsonld"], language="html")
 
     if skipped:
         with st.expander(f"Skipped rows ({skip_count})"):
@@ -528,14 +566,14 @@ if "results_df" in st.session_state:
         if st.button("Write Back to Google Sheet"):
             ws = st.session_state["ws"]
 
-            # Build col_map: individual Q/A columns + metadata
             col_map = {
                 "selected_keyword": "SEO Target Keyword",
                 "keyword_source": "Keyword Source",
                 "runner_up": "Runner Up Keyword",
+                "scrape_status": "Page Scrape Status",
                 "paa_count": "PAA Questions Found",
                 "faq_count": "FAQs Generated",
-                "faq_json": "FAQ JSON",
+                "faq_schema_jsonld": "FAQ Schema JSON-LD",
                 "status": "FAQ Status",
             }
             for idx in range(1, _num_faqs + 1):
@@ -555,7 +593,14 @@ if "results_df" in st.session_state:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _empty_result(url: str, status: str, num_faqs: int, keyword: str = None, source: str = None) -> dict:
+def _empty_result(
+    url: str,
+    status: str,
+    num_faqs: int,
+    keyword: str = None,
+    source: str = None,
+    scrape_status: str = "skipped"
+) -> dict:
     r = {
         "url": url,
         "selected_keyword": keyword,
@@ -563,9 +608,10 @@ def _empty_result(url: str, status: str, num_faqs: int, keyword: str = None, sou
         "runner_up": None,
         "kw_volume": None,
         "kw_difficulty": None,
+        "scrape_status": scrape_status,
         "paa_count": 0,
         "faq_count": 0,
-        "faq_json": "",
+        "faq_schema_jsonld": "",
         "status": status,
     }
     for idx in range(1, num_faqs + 1):

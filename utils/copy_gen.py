@@ -15,6 +15,39 @@ def sanitise(text: str, brand_name: str = "") -> str:
     return text
 
 
+# ── Schema builder ────────────────────────────────────────────────────────────
+
+def build_faq_schema(faq_items: list, page_url: str = "") -> str:
+    """Generate a schema.org FAQPage JSON-LD script block ready to paste into <head>.
+
+    Args:
+        faq_items: list of {"question": str, "answer": str}
+        page_url: optional, not required by spec but useful for reference
+
+    Returns:
+        Full <script type="application/ld+json"> block as a string.
+    """
+    schema = {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": item["question"],
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": item["answer"]
+                }
+            }
+            for item in faq_items
+            if item.get("question") and item.get("answer")
+        ]
+    }
+
+    json_str = json.dumps(schema, ensure_ascii=False, indent=2)
+    return f'<script type="application/ld+json">\n{json_str}\n</script>'
+
+
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
 _BIZ_CONTEXT = {
@@ -49,43 +82,57 @@ def _build_prompt(
     paa_questions: list,
     num_faqs: int,
     forbidden_phrases: str,
+    page_context: str,
 ) -> str:
     biz_ctx = _BIZ_CONTEXT.get(business_type, _BIZ_CONTEXT["general"])
     brand_line = f"Brand name: '{brand_name}'. Use exact casing throughout." if brand_name else "No brand name required."
-    h1_line = f"Page H1 (context only, do not copy): {h1}" if h1 else ""
+    h1_line = f"Page H1 (context only, do not copy verbatim): {h1}" if h1 else ""
     forbidden_line = f"Never use these phrases: {forbidden_phrases}" if forbidden_phrases.strip() else ""
+
+    if page_context:
+        context_block = (
+            "PAGE CONTENT EXCERPT (use this to understand what the page is actually about "
+            "and ensure FAQs are relevant to the page topic, not just the keyword):\n"
+            f"---\n{page_context}\n---"
+        )
+    else:
+        context_block = ""
 
     if paa_questions:
         q_list = "\n".join(f"- {q}" for q in paa_questions[:num_faqs + 3])
         seed_block = (
-            f"Use these People Also Ask questions as seed questions for the FAQ. "
-            f"You may rephrase slightly for clarity or fit. "
-            f"If fewer than {num_faqs} are listed, generate the remaining ones based on keyword and page context.\n"
+            f"Use these People Also Ask questions as seed questions. "
+            f"You may rephrase slightly for clarity or to better fit the page topic. "
+            f"If fewer than {num_faqs} are listed, generate the remaining ones based on "
+            f"the page content, keyword, and common user intent.\n"
             f"{q_list}"
         )
     else:
         seed_block = (
             f"No PAA data available. Generate {num_faqs} relevant FAQ questions based on "
-            f"the keyword, page type, and common user intent."
+            f"the page content excerpt, keyword, and common user intent."
         )
 
     return f"""You are an expert SEO copywriter writing FAQ content for a web page.
 
 Target keyword: {keyword}
 Page type: {page_type}
-Business type: {biz_ctx}
+Business type context: {biz_ctx}
 {h1_line}
 {brand_line}
 {forbidden_line}
 
+{context_block}
+
 {seed_block}
 
 Rules:
+- FAQs must reflect the actual content and topic of the page, not generic keyword answers
 - Each answer must be 40 to 80 words
 - No em dashes anywhere in questions or answers
 - No filler openers: never start with "Great question", "Certainly", "Of course", "Absolutely"
 - Answers must be factual and directly address the question
-- Do not pad with generic advice unrelated to the question
+- Do not pad with generic advice unrelated to the page
 - Questions should reflect real search intent, not marketing copy
 
 Return EXACTLY {num_faqs} FAQ items as a JSON array:
@@ -189,6 +236,7 @@ def generate_faq(
     paa_questions: list,
     num_faqs: int,
     forbidden_phrases: str = "",
+    page_context: str = "",
 ) -> list:
     """Generate FAQ Q&A pairs using the selected AI provider.
 
@@ -209,6 +257,7 @@ def generate_faq(
         paa_questions=paa_questions,
         num_faqs=num_faqs,
         forbidden_phrases=forbidden_phrases,
+        page_context=page_context,
     )
 
     raw = fn(api_key, prompt)
