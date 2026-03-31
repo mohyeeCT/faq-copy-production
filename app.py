@@ -68,10 +68,15 @@ with st.sidebar:
     dfs_password = st.text_input("Password", type="password")
 
     st.divider()
+    st.subheader("Jina Reader")
+    jina_key = st.text_input(
+        "Jina API Key", type="password",
+        help="Free at jina.ai - 10M tokens, no credit card. Without a key the app still works but at a lower rate limit."
+    )
     enable_scraping = st.toggle(
         "Enable page scraping",
         value=True,
-        help="Scrapes ~50% of each page to ground FAQs in actual page content. Disable to rely on keyword + PAA only."
+        help="Scrapes ~50% of each page via Jina Reader to ground FAQs in actual page content. Disable to rely on keyword + PAA only."
     )
 
     st.divider()
@@ -375,7 +380,7 @@ if "df" in st.session_state:
             scrape_status = "skipped"
             if enable_scraping:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: scraping page...")
-                scrape_result = scrape_page_context(url, max_chars=2000)
+                scrape_result = scrape_page_context(jina_key, url, max_chars=2000)
                 if scrape_result["success"]:
                     page_context = scrape_result["content"]
                     scrape_status = f"ok ({len(page_context)} chars)"

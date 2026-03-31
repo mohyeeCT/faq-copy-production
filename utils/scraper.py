@@ -1,45 +1,11 @@
 import re
 import requests
-from bs4 import BeautifulSoup
 
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-}
-
-# Tags that are noise and should be stripped before text extraction
-_STRIP_TAGS = [
-    "nav", "header", "footer", "aside", "form",
-    "script", "style", "noscript", "iframe",
-    "svg", "figure", "picture",
-    "[document]", "head"
-]
-
-# CSS classes/ids that indicate nav or boilerplate (substring match)
-_NOISE_CLASSES = [
-    "nav", "menu", "header", "footer", "sidebar", "breadcrumb",
-    "cookie", "banner", "popup", "modal", "overlay",
-    "social", "share", "newsletter", "subscribe",
-    "related", "recommended", "advertisement", "ad-",
-]
+JINA_BASE = "https://r.jina.ai"
 
 
-def _is_noise_element(tag) -> bool:
-    classes = " ".join(tag.get("class", []))
-    tag_id = tag.get("id", "")
-    combined = (classes + " " + tag_id).lower()
-    return any(n in combined for n in _NOISE_CLASSES)
-
-
-def scrape_page_context(url: str, max_chars: int = 2000) -> dict:
-    """Scrape a page with requests + BeautifulSoup and return truncated topic context.
-
-    No API key required.
+def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
+    """Scrape a page via Jina Reader and return truncated topic context.
 
     Returns:
         {
@@ -52,51 +18,35 @@ def scrape_page_context(url: str, max_chars: int = 2000) -> dict:
     if not url:
         return {"content": "", "title": "", "success": False, "error": "No URL provided"}
 
+    headers = {
+        "Accept": "text/plain",
+        "X-Return-Format": "text",
+    }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=20, allow_redirects=True)
+        resp = requests.get(
+            f"{JINA_BASE}/{url}",
+            headers=headers,
+            timeout=30
+        )
         resp.raise_for_status()
 
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        # Extract title
-        title = ""
-        title_tag = soup.find("title")
-        if title_tag:
-            title = title_tag.get_text(strip=True)
-
-        # Remove noise tags entirely
-        for tag_name in _STRIP_TAGS:
-            for tag in soup.find_all(tag_name):
-                tag.decompose()
-
-        # Remove noise elements by class/id
-        for tag in soup.find_all(True):
-            if _is_noise_element(tag):
-                tag.decompose()
-
-        # Try to find main content container first
-        main = (
-            soup.find("main") or
-            soup.find(attrs={"role": "main"}) or
-            soup.find("article") or
-            soup.find(id=re.compile(r"content|main|body", re.I)) or
-            soup.find(class_=re.compile(r"content|main|body|post|entry", re.I)) or
-            soup.body
-        )
-
-        if not main:
-            return {"content": "", "title": title, "success": False, "error": "Could not find main content element"}
-
-        # Extract text
-        text = main.get_text(separator="\n", strip=True)
-
-        # Clean up whitespace
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        text = re.sub(r"[ \t]{2,}", " ", text)
-        text = text.strip()
+        text = resp.text.strip()
 
         if not text:
-            return {"content": "", "title": title, "success": False, "error": "Page returned no extractable text"}
+            return {"content": "", "title": "", "success": False, "error": "Jina returned empty content"}
+
+        # Extract title from first line if it looks like a heading
+        title = ""
+        lines = text.splitlines()
+        if lines and lines[0].startswith("Title:"):
+            title = lines[0].replace("Title:", "").strip()
+
+        # Clean up excessive whitespace
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = text.strip()
 
         # Take first ~50%, capped at max_chars
         total_len = len(text)
