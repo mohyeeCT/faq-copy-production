@@ -65,6 +65,42 @@ def write_results_to_sheet(ws, results_df: pd.DataFrame, col_map: dict):
             headers.append(sheet_col)
             col_indices[df_col] = new_idx
 
+    # Expand the sheet if the required columns exceed the current grid width
+    max_col_needed = max(col_indices.values()) if col_indices else 0
+    max_row_needed = len(results_df) + 1  # +1 for header
+    sheet_meta = ws.spreadsheet.fetch_sheet_metadata()
+    for s in sheet_meta["sheets"]:
+        if s["properties"]["title"] == ws.title:
+            current_cols = s["properties"]["gridProperties"]["columnCount"]
+            current_rows = s["properties"]["gridProperties"]["rowCount"]
+            break
+    else:
+        current_cols, current_rows = 26, 1000
+
+    requests_body = []
+    if max_col_needed > current_cols:
+        requests_body.append({
+            "updateSheetProperties": {
+                "properties": {
+                    "sheetId": ws.id,
+                    "gridProperties": {"columnCount": max_col_needed + 10}
+                },
+                "fields": "gridProperties.columnCount"
+            }
+        })
+    if max_row_needed > current_rows:
+        requests_body.append({
+            "updateSheetProperties": {
+                "properties": {
+                    "sheetId": ws.id,
+                    "gridProperties": {"rowCount": max_row_needed + 50}
+                },
+                "fields": "gridProperties.rowCount"
+            }
+        })
+    if requests_body:
+        ws.spreadsheet.batch_update({"requests": requests_body})
+
     updates = []
     for row_num, (_, row) in enumerate(results_df.iterrows(), start=2):
         for df_col, col_idx in col_indices.items():
