@@ -31,7 +31,9 @@ def _empty_result(
         "kw_volume": None,
         "kw_difficulty": None,
         "scrape_status": scrape_status,
+        "page_context_preview": "",
         "paa_count": 0,
+        "paa_questions": "",
         "faq_count": 0,
         "faq_schema_jsonld": "",
         "status": status,
@@ -496,7 +498,9 @@ if "df" in st.session_state:
                     "kw_volume": kw_volume,
                     "kw_difficulty": kw_difficulty,
                     "scrape_status": scrape_status,
+                    "page_context_preview": page_context,
                     "paa_count": len(paa_questions),
+                    "paa_questions": " | ".join(paa_questions) if paa_questions else "",
                     "faq_count": len(faq_items),
                     "faq_schema_jsonld": schema_jsonld,
                     "status": "ok"
@@ -569,6 +573,22 @@ if "results_df" in st.session_state:
             if row.get("faq_schema_jsonld"):
                 with st.expander("Schema.org JSON-LD"):
                     st.code(row["faq_schema_jsonld"], language="html")
+
+            with st.expander("Debug: what the AI was given"):
+                sc = row.get("page_context_preview", "")
+                if sc:
+                    st.caption(f"Scraped content ({len(sc)} chars)")
+                    st.text_area("Page content sent to AI", value=sc, height=200, disabled=True, key=f"ctx_{row['url']}")
+                else:
+                    st.caption(f"Scrape status: {row.get('scrape_status', 'skipped')} — AI used keyword + PAA only.")
+
+                paa = row.get("paa_questions", "")
+                if paa:
+                    st.caption("PAA questions used as seeds:")
+                    for q in paa.split(" | "):
+                        st.markdown(f"- {q}")
+                else:
+                    st.caption("No PAA questions retrieved.")
 
     if skipped:
         with st.expander(f"Skipped rows ({skip_count})"):
