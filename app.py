@@ -35,7 +35,8 @@ def _empty_result(
         "paa_count": 0,
         "paa_questions": "",
         "faq_count": 0,
-        "faq_schema_jsonld": "",
+        "faq_schema_json": "",
+        "faq_schema_script": "",
         "status": status,
     }
     for idx in range(1, num_faqs + 1):
@@ -488,7 +489,7 @@ if "df" in st.session_state:
                     page_context=page_context,
                 )
 
-                schema_jsonld = build_faq_schema(faq_items, page_url=url)
+                schema_raw_json, schema_script_block = build_faq_schema(faq_items)
 
                 row_result = {
                     "url": url,
@@ -502,7 +503,8 @@ if "df" in st.session_state:
                     "paa_count": len(paa_questions),
                     "paa_questions": " | ".join(paa_questions) if paa_questions else "",
                     "faq_count": len(faq_items),
-                    "faq_schema_jsonld": schema_jsonld,
+                    "faq_schema_json": schema_raw_json,
+                    "faq_schema_script": schema_script_block,
                     "status": "ok"
                 }
 
@@ -570,9 +572,9 @@ if "results_df" in st.session_state:
                     st.write(a)
                     st.divider()
 
-            if row.get("faq_schema_jsonld"):
-                with st.expander("Schema.org JSON-LD"):
-                    st.code(row["faq_schema_jsonld"], language="html")
+            if row.get("faq_schema_script"):
+                with st.expander("Schema.org JSON-LD (paste into <head>)"):
+                    st.code(row["faq_schema_script"], language="html")
 
             with st.expander("Debug: what the AI was given"):
                 sc = row.get("page_context_preview", "")
@@ -619,7 +621,7 @@ if "results_df" in st.session_state:
                 "scrape_status": "Page Scrape Status",
                 "paa_count": "PAA Questions Found",
                 "faq_count": "FAQs Generated",
-                "faq_schema_jsonld": "FAQ Schema JSON-LD",
+                "faq_schema_json": "FAQ Schema JSON-LD",
                 "status": "FAQ Status",
             }
             for idx in range(1, _num_faqs + 1):

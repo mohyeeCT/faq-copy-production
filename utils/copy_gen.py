@@ -17,15 +17,13 @@ def sanitise(text: str, brand_name: str = "") -> str:
 
 # ── Schema builder ────────────────────────────────────────────────────────────
 
-def build_faq_schema(faq_items: list, page_url: str = "") -> str:
-    """Generate a schema.org FAQPage JSON-LD script block ready to paste into <head>.
-
-    Args:
-        faq_items: list of {"question": str, "answer": str}
-        page_url: optional, not required by spec but useful for reference
+def build_faq_schema(faq_items: list) -> tuple:
+    """Generate a schema.org FAQPage JSON-LD block.
 
     Returns:
-        Full <script type="application/ld+json"> block as a string.
+        (raw_json, script_block)
+        raw_json     -- JSON string only, safe to store in Google Sheets
+        script_block -- full <script> tag for pasting into <head>
     """
     schema = {
         "@context": "https://schema.org",
@@ -44,9 +42,9 @@ def build_faq_schema(faq_items: list, page_url: str = "") -> str:
         ]
     }
 
-    json_str = json.dumps(schema, ensure_ascii=False, indent=2)
-    return f'<script type="application/ld+json">\n{json_str}\n</script>'
-
+    raw_json = json.dumps(schema, ensure_ascii=False, indent=2)
+    script_block = '<script type="application/ld+json">\n' + raw_json + '\n</script>'
+    return raw_json, script_block
 
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
