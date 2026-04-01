@@ -20,8 +20,31 @@ def load_sheet(gc: gspread.Client, sheet_url: str, worksheet_name: str = None):
         ws = spreadsheet.worksheet(worksheet_name)
     else:
         ws = spreadsheet.get_worksheet(0)
-    data = ws.get_all_records()
-    df = pd.DataFrame(data)
+
+    all_values = ws.get_all_values()
+    if not all_values:
+        return pd.DataFrame(), spreadsheet, ws
+
+    # Build headers: replace empty cells with a placeholder so pandas
+    # doesn't complain, and deduplicate any repeated names
+    raw_headers = all_values[0]
+    seen = {}
+    headers = []
+    for i, h in enumerate(raw_headers):
+        h = h.strip() if h.strip() else f"_col_{i}"
+        if h in seen:
+            seen[h] += 1
+            h = f"{h}_{seen[h]}"
+        else:
+            seen[h] = 0
+        headers.append(h)
+
+    rows = all_values[1:]
+    # Pad short rows so every row has the same number of columns
+    n_cols = len(headers)
+    rows = [r + [""] * (n_cols - len(r)) for r in rows]
+
+    df = pd.DataFrame(rows, columns=headers)
     return df, spreadsheet, ws
 
 
