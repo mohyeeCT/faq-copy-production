@@ -7,6 +7,9 @@ JINA_BASE = "https://r.jina.ai"
 def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
     """Scrape a page via Jina Reader and return truncated topic context.
 
+    Uses X-Target-Selector to focus on main content elements only,
+    skipping nav, header, cart, and footer boilerplate.
+
     Returns:
         {
             "content": str,
@@ -20,7 +23,13 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
 
     headers = {
         "Accept": "text/plain",
-        "X-Return-Format": "text",
+        "X-Return-Format": "markdown",
+        "X-With-Links-Summary": "false",
+        "X-With-Images-Summary": "false",
+        # Target main content containers used by most CMSs and page builders.
+        # Jina will extract only the first matching element.
+        "X-Target-Selector": "main, #MainContent, #main-content, article, .page-content, .entry-content, .post-content, [role='main']",
+        "X-Timeout": "30",
     }
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -29,7 +38,7 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
         resp = requests.get(
             f"{JINA_BASE}/{url}",
             headers=headers,
-            timeout=30
+            timeout=35
         )
         resp.raise_for_status()
 
@@ -38,17 +47,26 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 2000) -> dict:
         if not text:
             return {"content": "", "title": "", "success": False, "error": "Jina returned empty content"}
 
-        # Extract title from first line if it looks like a heading
+        # Extract title from Jina metadata block (format: "Title: ...")
         title = ""
-        lines = text.splitlines()
-        if lines and lines[0].startswith("Title:"):
-            title = lines[0].replace("Title:", "").strip()
+        title_match = re.search(r"^Title:\s*(.+)$", text, re.MULTILINE)
+        if title_match:
+            title = title_match.group(1).strip()
 
-        # Clean up excessive whitespace
+        # Drop image lines
+        text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+
+        # Drop pure link-list lines (nav remnants)
+        text = re.sub(r"^\s*\*\s+\[.+?\]\(https?://.+?\)\s*$", "", text, flags=re.MULTILINE)
+
+        # Collapse whitespace
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = text.strip()
 
-        # Take first ~50%, capped at max_chars
+        if not text:
+            return {"content": "", "title": title, "success": False, "error": "No content found after stripping boilerplate"}
+
+        # Take first ~50% of cleaned content, capped at max_chars
         total_len = len(text)
         cutoff = min(max_chars, total_len // 2 + 1)
         truncated = text[:cutoff]
