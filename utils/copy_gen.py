@@ -77,7 +77,9 @@ def _build_prompt(
     brand_name: str,
     business_type: str,
     h1: str,
-    paa_questions: list,
+    ai_overview_sections: list,
+    ai_overview_raw: str,
+    paa_items: list,
     num_faqs: int,
     forbidden_phrases: str,
     page_context: str,
@@ -89,29 +91,46 @@ def _build_prompt(
 
     if page_context:
         context_block = (
-            "PAGE CONTENT EXCERPT (use this to understand what the page is actually about "
-            "and ensure FAQs are relevant to the page topic, not just the keyword):\n"
+            "PAGE CONTENT EXCERPT (use this to understand what the page is actually about):\n"
             f"---\n{page_context}\n---"
         )
     else:
         context_block = ""
 
-    if paa_questions:
-        q_list = "\n".join(f"- {q}" for q in paa_questions[:num_faqs + 3])
-        seed_block = (
-            f"Use these People Also Ask questions as seed questions. "
-            f"You may rephrase slightly for clarity or to better fit the page topic. "
-            f"If fewer than {num_faqs} are listed, generate the remaining ones based on "
-            f"the page content, keyword, and common user intent.\n"
-            f"{q_list}"
+    # ── AI Overview block (priority 1) ────────────────────────────────────
+    if ai_overview_sections:
+        ao_lines = []
+        for s in ai_overview_sections:
+            if s.get("title") and s.get("content"):
+                ao_lines.append(f"- {s['title']}: {s['content']}")
+            elif s.get("title"):
+                ao_lines.append(f"- {s['title']}")
+            elif s.get("content"):
+                ao_lines.append(f"- {s['content']}")
+        ao_block = (
+            "GOOGLE AI OVERVIEW (highest priority signal — Google already surfaced these subtopics "
+            "for this keyword. Mirror this structure in the FAQs to maximise AI Overview citation potential):\n"
+            + "\n".join(ao_lines)
         )
     else:
-        seed_block = (
-            f"No PAA data available. Generate {num_faqs} relevant FAQ questions based on "
-            f"the page content excerpt, keyword, and common user intent."
-        )
+        ao_block = "No AI Overview found for this keyword. Use PAA and page context as signals."
 
-    return f"""You are an expert SEO copywriter writing FAQ content for a web page.
+    # ── PAA block (priority 2) ────────────────────────────────────────────
+    if paa_items:
+        paa_lines = []
+        for p in paa_items[:num_faqs + 3]:
+            line = f"- Q: {p['question']}"
+            if p.get("answer"):
+                line += f" | Snippet: {p['answer'][:120]}"
+            paa_lines.append(line)
+        paa_block = (
+            "PEOPLE ALSO ASK (use these to fill gaps not already covered by the AI Overview):\n"
+            + "\n".join(paa_lines)
+        )
+    else:
+        paa_block = "No PAA data available."
+
+    return f"""You are an expert SEO copywriter writing FAQ content optimised to appear in Google AI Overviews.
 
 Target keyword: {keyword}
 Page type: {page_type}
@@ -122,23 +141,26 @@ Business type context: {biz_ctx}
 
 {context_block}
 
-{seed_block}
+{ao_block}
 
-Rules:
-- FAQs must reflect the actual content and topic of the page, not generic keyword answers
-- Each answer must be 40 to 80 words
-- No em dashes anywhere in questions or answers
-- No filler openers: never start with "Great question", "Certainly", "Of course", "Absolutely"
-- Answers must be factual and directly address the question
-- Do not pad with generic advice unrelated to the page
-- Questions should reflect real search intent, not marketing copy
+{paa_block}
 
-Return EXACTLY {num_faqs} FAQ items as a JSON array:
+INSTRUCTIONS:
+1. Use the AI Overview sections as your primary source for FAQ questions. Each major subtopic in the AI Overview should map to a question. Rephrase section titles into natural questions (e.g. "Key Installation Steps" becomes "What are the steps to install a water softener?").
+2. Fill remaining FAQ slots with PAA questions that are NOT already covered by an AI Overview topic.
+3. For each answer: lead with a direct, complete answer in the first sentence. Add supporting detail after. 40 to 80 words per answer. Write for featured snippet format.
+4. Answers must reflect the actual page content and topic, not generic keyword answers.
+5. No em dashes anywhere. No filler openers (never start with "Great question", "Certainly", "Of course", "Absolutely").
+6. Questions should read as natural user questions, not marketing copy.
+
+Return EXACTLY {num_faqs} FAQ items as a JSON array with a "source" field per item:
 [
-  {{"question": "...", "answer": "..."}},
-  {{"question": "...", "answer": "..."}}
+  {{"question": "...", "answer": "...", "source": "ai_overview"}},
+  {{"question": "...", "answer": "...", "source": "paa"}},
+  {{"question": "...", "answer": "...", "source": "generated"}}
 ]
 
+source values: "ai_overview" if the question came from the AI Overview, "paa" if from PAA, "generated" if neither.
 Return only the raw JSON array. No preamble, no explanation, no markdown code fences."""
 
 
@@ -231,15 +253,17 @@ def generate_faq(
     brand_name: str,
     business_type: str,
     h1: str,
-    paa_questions: list,
+    ai_overview_sections: list,
+    ai_overview_raw: str,
+    paa_items: list,
     num_faqs: int,
     forbidden_phrases: str = "",
     page_context: str = "",
 ) -> list:
     """Generate FAQ Q&A pairs using the selected AI provider.
 
-    Returns a list of dicts: [{"question": str, "answer": str}, ...]
-    All output is run through the sanitiser.
+    Returns a list of dicts: [{"question": str, "answer": str, "source": str}, ...]
+    source: "ai_overview" | "paa" | "generated"
     Raises on API failure so callers can handle and log errors.
     """
     fn = _PROVIDER_FN.get(provider)
@@ -252,7 +276,9 @@ def generate_faq(
         brand_name=brand_name,
         business_type=business_type,
         h1=h1,
-        paa_questions=paa_questions,
+        ai_overview_sections=ai_overview_sections,
+        ai_overview_raw=ai_overview_raw,
+        paa_items=paa_items,
         num_faqs=num_faqs,
         forbidden_phrases=forbidden_phrases,
         page_context=page_context,
@@ -268,6 +294,7 @@ def generate_faq(
         sanitised.append({
             "question": sanitise(item.get("question", ""), brand_name),
             "answer": sanitise(item.get("answer", ""), brand_name),
+            "source": item.get("source", "generated"),
         })
 
     return sanitised

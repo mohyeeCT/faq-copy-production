@@ -67,19 +67,35 @@ def get_keyword_difficulty(login: str, password: str, keywords: list, location_c
         return {}
 
 
-def get_people_also_ask(login: str, password: str, keyword: str, location_code: int = 2840) -> list:
-    """Fetch PAA questions for a keyword via DataForSEO SERP organic live advanced.
-    Returns a list of question strings (up to 8). Returns [] on failure.
-    PAA items appear as type='people_also_ask' blocks inside the SERP results.
+def get_serp_data(login: str, password: str, keyword: str, location_code: int = 2840) -> dict:
+    """Single SERP call that returns both AI Overview and PAA data.
+
+    Returns:
+    {
+        "ai_overview_present": bool,
+        "ai_overview_sections": [{"title": str, "content": str}, ...],
+        "ai_overview_raw": str,          # full concatenated AI overview text
+        "paa_questions": [str, ...],     # PAA question strings
+        "paa_items": [{"question": str, "answer": str, "url": str}, ...]
+    }
     """
+    empty = {
+        "ai_overview_present": False,
+        "ai_overview_sections": [],
+        "ai_overview_raw": "",
+        "paa_questions": [],
+        "paa_items": [],
+    }
+
     if not keyword:
-        return []
+        return empty
 
     payload = [{
         "keyword": keyword,
         "location_code": location_code,
         "language_code": "en",
-        "depth": 10
+        "depth": 10,
+        "people_also_ask_click_depth": 2,
     }]
 
     try:
@@ -92,21 +108,83 @@ def get_people_also_ask(login: str, password: str, keyword: str, location_code: 
         r.raise_for_status()
         data = r.json()
 
-        questions = []
+        ai_sections = []
+        ai_raw_parts = []
+        paa_questions = []
+        paa_items = []
+
         for task in data.get("tasks", []):
             for result_block in (task.get("result") or []):
                 for item in (result_block.get("items") or []):
-                    if item.get("type") == "people_also_ask":
-                        for paa_element in (item.get("items") or []):
-                            q = paa_element.get("title", "").strip()
-                            if q and q not in questions:
-                                questions.append(q)
-                    if len(questions) >= 8:
-                        break
-                if len(questions) >= 8:
-                    break
+                    item_type = item.get("type", "")
 
-        return questions
+                    # ── AI Overview ──────────────────────────────────────────
+                    if item_type in ("ai_overview", "asynchronous_ai_overview"):
+                        for block in (item.get("items") or []):
+                            block_type = block.get("type", "")
 
-    except Exception:
-        return []
+                            # Section with a title
+                            if block_type == "ai_overview_element" or block.get("title"):
+                                title = block.get("title", "").strip()
+                                # Content may be nested in sub-items or in text field
+                                content_parts = []
+                                for sub in (block.get("items") or []):
+                                    txt = sub.get("text", "") or sub.get("content", "")
+                                    if txt:
+                                        content_parts.append(txt.strip())
+                                if not content_parts:
+                                    content_parts = [block.get("text", "").strip()]
+
+                                content = " ".join(filter(None, content_parts))
+                                if title or content:
+                                    ai_sections.append({
+                                        "title": title,
+                                        "content": content
+                                    })
+                                    if title:
+                                        ai_raw_parts.append(f"{title}: {content}")
+                                    else:
+                                        ai_raw_parts.append(content)
+
+                            # Plain text block without a title
+                            elif block.get("text"):
+                                txt = block["text"].strip()
+                                if txt:
+                                    ai_sections.append({"title": "", "content": txt})
+                                    ai_raw_parts.append(txt)
+
+                    # ── PAA ──────────────────────────────────────────────────
+                    elif item_type == "people_also_ask":
+                        for paa_el in (item.get("items") or []):
+                            q = paa_el.get("title", "").strip()
+                            if not q or q in paa_questions:
+                                continue
+                            paa_questions.append(q)
+                            # Extract best available answer snippet
+                            answer = ""
+                            for result_item in (paa_el.get("items") or []):
+                                answer = (
+                                    result_item.get("description", "")
+                                    or result_item.get("text", "")
+                                    or ""
+                                ).strip()
+                                if answer:
+                                    break
+                            paa_items.append({
+                                "question": q,
+                                "answer": answer,
+                                "url": paa_el.get("url", "")
+                            })
+
+        return {
+            "ai_overview_present": len(ai_sections) > 0,
+            "ai_overview_sections": ai_sections,
+            "ai_overview_raw": "\n".join(ai_raw_parts),
+            "paa_questions": paa_questions,
+            "paa_items": paa_items,
+        }
+
+    except Exception as e:
+        result = empty.copy()
+        result["error"] = str(e)
+        return result

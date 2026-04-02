@@ -7,7 +7,7 @@ from io import StringIO
 
 from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
-from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_people_also_ask
+from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_data
 from utils.keyword import select_keyword
 from utils.copy_gen import generate_faq, build_faq_schema
 from utils.scraper import scrape_page_context
@@ -32,8 +32,10 @@ def _empty_result(
         "kw_difficulty": None,
         "scrape_status": scrape_status,
         "page_context_preview": "",
+        "ai_overview_present": False,
         "paa_count": 0,
         "paa_questions": "",
+        "ao_question_count": 0,
         "faq_count": 0,
         "faq_schema_json": "",
         "faq_schema_script": "",
@@ -42,6 +44,7 @@ def _empty_result(
     for idx in range(1, num_faqs + 1):
         r[f"faq_{idx}_question"] = ""
         r[f"faq_{idx}_answer"] = ""
+        r[f"faq_{idx}_source"] = ""
     return r
 
 
@@ -464,11 +467,16 @@ if "df" in st.session_state:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: skipped ({keyword_source})")
                 continue
 
-            # Step 3: Fetch PAA
-            progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: fetching PAA for '{selected_keyword}'...")
-            paa_questions = get_people_also_ask(
+            # Step 3: Fetch AI Overview + PAA in one SERP call
+            progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: fetching AI Overview + PAA...")
+            serp_data = get_serp_data(
                 dfs_login, dfs_password, selected_keyword, location_code=int(location_code)
             )
+            ai_overview_present = serp_data["ai_overview_present"]
+            ai_overview_sections = serp_data["ai_overview_sections"]
+            ai_overview_raw = serp_data["ai_overview_raw"]
+            paa_items = serp_data["paa_items"]
+            paa_questions = serp_data["paa_questions"]
 
             # Step 4: Generate FAQ
             progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: generating FAQs...")
@@ -481,7 +489,9 @@ if "df" in st.session_state:
                     brand_name=brand_name,
                     business_type=business_type,
                     h1=h1_value,
-                    paa_questions=paa_questions,
+                    ai_overview_sections=ai_overview_sections,
+                    ai_overview_raw=ai_overview_raw,
+                    paa_items=paa_items,
                     num_faqs=num_faqs,
                     forbidden_phrases="\n".join(
                         p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
@@ -500,6 +510,8 @@ if "df" in st.session_state:
                     "kw_difficulty": kw_difficulty,
                     "scrape_status": scrape_status,
                     "page_context_preview": page_context,
+                    "ai_overview_present": ai_overview_present,
+                    "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
                     "paa_count": len(paa_questions),
                     "paa_questions": " | ".join(paa_questions) if paa_questions else "",
                     "faq_count": len(faq_items),
@@ -512,9 +524,11 @@ if "df" in st.session_state:
                     if idx < len(faq_items):
                         row_result[f"faq_{idx + 1}_question"] = faq_items[idx]["question"]
                         row_result[f"faq_{idx + 1}_answer"] = faq_items[idx]["answer"]
+                        row_result[f"faq_{idx + 1}_source"] = faq_items[idx].get("source", "generated")
                     else:
                         row_result[f"faq_{idx + 1}_question"] = ""
                         row_result[f"faq_{idx + 1}_answer"] = ""
+                        row_result[f"faq_{idx + 1}_source"] = ""
 
                 results.append(row_result)
 
@@ -554,7 +568,7 @@ if "results_df" in st.session_state:
     m2.metric("Generated", ok_count)
     m3.metric("Skipped / Errors", skip_count)
 
-    summary_cols = ["url", "selected_keyword", "keyword_source", "scrape_status", "paa_count", "faq_count", "status"]
+    summary_cols = ["url", "selected_keyword", "keyword_source", "scrape_status", "ai_overview_present", "ao_question_count", "paa_count", "faq_count", "status"]
     available_summary = [c for c in summary_cols if c in results_df.columns]
     st.subheader("Summary")
     st.dataframe(results_df[available_summary], use_container_width=True, height=300)
@@ -577,20 +591,36 @@ if "results_df" in st.session_state:
                     st.code(row["faq_schema_script"], language="html")
 
             with st.expander("Debug: what the AI was given"):
+                # AI Overview
+                ao_present = row.get("ai_overview_present", False)
+                st.caption(f"AI Overview: {'YES' if ao_present else 'NO — fell back to PAA + page context'}")
+
+                # Question sources
+                ao_q = row.get("ao_question_count", 0)
+                paa_q = row.get("paa_count", 0)
+                st.caption(f"FAQ sources: {ao_q} from AI Overview, {paa_q} PAA questions available")
+
+                # Per-FAQ source badges
+                for idx in range(1, _num_faqs + 1):
+                    q = row.get(f"faq_{idx}_question", "")
+                    src = row.get(f"faq_{idx}_source", "")
+                    if q and src:
+                        badge = {"ai_overview": "🔵 AI Overview", "paa": "🟢 PAA", "generated": "⚪ Generated"}.get(src, src)
+                        st.markdown(f"{badge} — {q}")
+
+                # Scraped content
                 sc = row.get("page_context_preview", "")
                 if sc:
-                    st.caption(f"Scraped content ({len(sc)} chars)")
-                    st.text_area("Page content sent to AI", value=sc, height=200, disabled=True, key=f"ctx_{row['url']}")
+                    st.caption(f"Scraped page content ({len(sc)} chars)")
+                    st.text_area("Page content sent to AI", value=sc, height=150, disabled=True, key=f"ctx_{row['url']}")
                 else:
-                    st.caption(f"Scrape status: {row.get('scrape_status', 'skipped')} — AI used keyword + PAA only.")
+                    st.caption(f"Scrape status: {row.get('scrape_status', 'skipped')} — no page context used.")
 
                 paa = row.get("paa_questions", "")
                 if paa:
-                    st.caption("PAA questions used as seeds:")
+                    st.caption("PAA questions retrieved:")
                     for q in paa.split(" | "):
                         st.markdown(f"- {q}")
-                else:
-                    st.caption("No PAA questions retrieved.")
 
     if skipped:
         with st.expander(f"Skipped rows ({skip_count})"):
@@ -619,6 +649,8 @@ if "results_df" in st.session_state:
                 "keyword_source": "Keyword Source",
                 "runner_up": "Runner Up Keyword",
                 "scrape_status": "Page Scrape Status",
+                "ai_overview_present": "AI Overview Present",
+                "ao_question_count": "FAQs from AI Overview",
                 "paa_count": "PAA Questions Found",
                 "faq_count": "FAQs Generated",
                 "faq_schema_json": "FAQ Schema JSON-LD",
@@ -627,6 +659,7 @@ if "results_df" in st.session_state:
             for idx in range(1, _num_faqs + 1):
                 col_map[f"faq_{idx}_question"] = f"FAQ {idx} Question"
                 col_map[f"faq_{idx}_answer"] = f"FAQ {idx} Answer"
+                col_map[f"faq_{idx}_source"] = f"FAQ {idx} Source"
 
             with st.spinner("Writing to sheet..."):
                 try:
