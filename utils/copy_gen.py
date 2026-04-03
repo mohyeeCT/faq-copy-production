@@ -130,7 +130,7 @@ def _build_prompt(
     else:
         paa_block = "No PAA data available."
 
-    return f"""You are an expert SEO copywriter writing FAQ content optimised to appear in Google AI Overviews.
+    return f"""You are an expert SEO copywriter writing FAQ content for a web page. Your job is to generate questions that real buyers or visitors would ask about THIS SPECIFIC PAGE, then answer them in a way that could rank in Google AI Overviews.
 
 Target keyword: {keyword}
 Page type: {page_type}
@@ -145,24 +145,25 @@ Business type context: {biz_ctx}
 
 {paa_block}
 
-INSTRUCTIONS:
-1. Use the AI Overview sections as your primary source for FAQ questions. Each major subtopic in the AI Overview should map to a question. Rephrase section titles into natural questions (e.g. "Key Installation Steps" becomes "What are the steps to install a water softener?").
-2. Fill remaining FAQ slots with PAA questions that are NOT already covered by an AI Overview topic.
-3. For each answer: lead with a direct, complete answer in the first sentence. Add supporting detail after. 40 to 80 words per answer. Write for featured snippet format.
-4. Answers must reflect the actual page content and topic, not generic keyword answers.
-5. No em dashes anywhere. No filler openers (never start with "Great question", "Certainly", "Of course", "Absolutely").
-6. Questions should read as natural user questions, not marketing copy.
+YOUR TASK:
+Generate {num_faqs} FAQ questions that are directly relevant to this specific page and keyword. Use the AI Overview and PAA data above as research signals to understand what users want to know — but do NOT copy or rephrase those questions verbatim. Only use a PAA or AI Overview question if it is genuinely relevant to what this page is about.
 
-Return EXACTLY {num_faqs} FAQ items as a JSON array with a "source" field per item:
+For each question:
+- It must relate directly to the page content, keyword, and what a visitor to this page would actually want to know
+- Reject any signal question that is too generic, off-topic, or does not match the page purpose (e.g. trivia questions, broad definitional questions unrelated to the page)
+- Lead the answer with a direct, complete response in the first sentence
+- Keep answers 40 to 80 words, written for featured snippet format
+- No em dashes. No filler openers (never: "Great question", "Certainly", "Of course", "Absolutely")
+
+Return EXACTLY {num_faqs} FAQ items as a JSON array with a "source" field:
 [
   {{"question": "...", "answer": "...", "source": "ai_overview"}},
   {{"question": "...", "answer": "...", "source": "paa"}},
   {{"question": "...", "answer": "...", "source": "generated"}}
 ]
 
-source values: "ai_overview" if the question came from the AI Overview, "paa" if from PAA, "generated" if neither.
+source values: "ai_overview" if inspired by the AI Overview, "paa" if inspired by PAA, "generated" if neither. If a PAA/AI Overview question was rejected as irrelevant, use "generated" for the replacement.
 Return only the raw JSON array. No preamble, no explanation, no markdown code fences."""
-
 
 def _parse_faq_json(raw: str) -> list:
     """Parse JSON array from AI response. Strips markdown fences if present."""
