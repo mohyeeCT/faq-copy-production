@@ -396,7 +396,7 @@ if "df" in st.session_state:
             scrape_status = "skipped"
             if enable_scraping:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: scraping page...")
-                scrape_result = scrape_page_context(jina_key, url, max_chars=3000)
+                scrape_result = scrape_page_context(jina_key, url, max_chars=4000)
                 if scrape_result["success"]:
                     page_context = scrape_result["content"]
                     scrape_status = f"ok ({len(page_context)} chars)"
