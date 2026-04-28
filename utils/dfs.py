@@ -144,6 +144,8 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "paa_items": [],
         "serp_item_types": [],
         "paa_raw_debug": "",
+        "ao_raw_debug": "",
+        "ao_raw_found": False,
     }
 
     if not keyword:
@@ -173,6 +175,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         paa_questions = []
         paa_items = []
         paa_raw_items = []
+        ao_raw_items = []
 
         for task in data.get("tasks", []):
             for result_block in (task.get("result") or []):
@@ -181,6 +184,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
 
                     # ── AI Overview ──────────────────────────────────────────
                     if item_type in ("ai_overview", "asynchronous_ai_overview"):
+                        ao_raw_items.append(item)
                         ao_text = _extract_ai_overview_text(item)
                         if ao_text:
                             ai_sections.append({"title": "", "content": ao_text})
@@ -246,6 +250,8 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
             "paa_items": paa_items,
             "serp_item_types": all_item_types,
             "paa_raw_debug": str(paa_raw_items[:1])[:500] if paa_raw_items else "",
+            "ao_raw_debug": str(ao_raw_items[:1])[:800] if ao_raw_items else "",
+            "ao_raw_found": len(ao_raw_items) > 0,
         }
 
     except Exception as e:

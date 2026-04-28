@@ -35,6 +35,8 @@ def _empty_result(
         "ai_overview_present": False,
         "ai_overview_async_only": False,
         "serp_item_types": "",
+        "ao_raw_debug": "",
+        "ao_raw_found": False,
         "paa_raw_debug": "",
         "paa_count": 0,
         "paa_questions": "",
@@ -503,6 +505,8 @@ if "df" in st.session_state:
             paa_items = serp_data["paa_items"]
             paa_questions = serp_data["paa_questions"]
             serp_item_types = serp_data.get("serp_item_types", [])
+            ao_raw_debug = serp_data.get("ao_raw_debug", "")
+            ao_raw_found = serp_data.get("ao_raw_found", False)
 
             # Step 4: Generate FAQ
             progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: generating FAQs...")
@@ -539,6 +543,8 @@ if "df" in st.session_state:
                     "ai_overview_present": ai_overview_present,
                     "ai_overview_async_only": ai_overview_async_only,
                     "serp_item_types": ", ".join(serp_item_types),
+                    "ao_raw_debug": ao_raw_debug,
+                    "ao_raw_found": ao_raw_found,
                     "paa_raw_debug": serp_data.get("paa_raw_debug", ""),
                     "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
                     "paa_count": len(paa_questions),
@@ -634,6 +640,16 @@ if "results_df" in st.session_state:
                 raw_types = row.get("serp_item_types", "")
                 if raw_types:
                     st.caption(f"DFS SERP item types returned: {raw_types}")
+
+                ao_raw = row.get("ao_raw_debug", "")
+                ao_found = row.get("ao_raw_found", False)
+                if ao_found and not ao_present:
+                    st.warning("AO item found in DFS response but text extraction returned empty — check raw structure below")
+                if ao_raw:
+                    with st.expander("AI Overview raw structure (debug)"):
+                        st.code(ao_raw)
+                elif not ao_found:
+                    st.caption("AO raw: no ai_overview item returned by DFS for this keyword/request")
 
                 paa_raw = row.get("paa_raw_debug", "")
                 if paa_raw:
