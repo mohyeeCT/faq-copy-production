@@ -35,6 +35,7 @@ def _empty_result(
         "ai_overview_present": False,
         "ai_overview_async_only": False,
         "serp_item_types": "",
+        "paa_raw_debug": "",
         "paa_count": 0,
         "paa_questions": "",
         "ao_question_count": 0,
@@ -530,6 +531,7 @@ if "df" in st.session_state:
                     "ai_overview_present": ai_overview_present,
                     "ai_overview_async_only": ai_overview_async_only,
                     "serp_item_types": ", ".join(serp_item_types),
+                    "paa_raw_debug": serp_data.get("paa_raw_debug", ""),
                     "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
                     "paa_count": len(paa_questions),
                     "paa_questions": " | ".join(paa_questions) if paa_questions else "",
@@ -624,6 +626,13 @@ if "results_df" in st.session_state:
                 raw_types = row.get("serp_item_types", "")
                 if raw_types:
                     st.caption(f"DFS SERP item types returned: {raw_types}")
+
+                paa_raw = row.get("paa_raw_debug", "")
+                if paa_raw:
+                    with st.expander("PAA raw structure (debug)"):
+                        st.code(paa_raw)
+                elif "people_also_ask" in raw_types:
+                    st.caption("PAA raw: item found in SERP but items[] was empty or questions had no title field")
 
                 # Question sources
                 ao_q = row.get("ao_question_count", 0)

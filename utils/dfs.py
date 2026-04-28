@@ -87,6 +87,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "paa_questions": [],
         "paa_items": [],
         "serp_item_types": [],
+        "paa_raw_debug": "",
     }
 
     if not keyword:
@@ -114,6 +115,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         ai_raw_parts = []
         paa_questions = []
         paa_items = []
+        paa_raw_items = []
 
         for task in data.get("tasks", []):
             for result_block in (task.get("result") or []):
@@ -156,9 +158,17 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
                                     ai_raw_parts.append(txt)
 
                     # ── PAA ──────────────────────────────────────────────────
-                    elif item_type == "people_also_ask":
+                    if item_type == "people_also_ask":
+                        paa_raw_items.append(item)
                         for paa_el in (item.get("items") or []):
-                            q = paa_el.get("title", "").strip()
+                            # DFS uses "title" for the question text,
+                            # but fall back to other fields defensively
+                            q = (
+                                paa_el.get("title", "")
+                                or paa_el.get("question", "")
+                                or paa_el.get("name", "")
+                                or paa_el.get("text", "")
+                            ).strip()
                             if not q or q in paa_questions:
                                 continue
                             paa_questions.append(q)
@@ -168,6 +178,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
                                 answer = (
                                     result_item.get("description", "")
                                     or result_item.get("text", "")
+                                    or result_item.get("snippet", "")
                                     or ""
                                 ).strip()
                                 if answer:
@@ -199,6 +210,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
             "paa_questions": paa_questions,
             "paa_items": paa_items,
             "serp_item_types": all_item_types,
+            "paa_raw_debug": str(paa_raw_items[:1])[:500] if paa_raw_items else "",
         }
 
     except Exception as e:
