@@ -37,6 +37,7 @@ def _empty_result(
         "serp_item_types": "",
         "ao_raw_debug": "",
         "ao_raw_found": False,
+        "batch_num": 0,
         "prompt_block_sent": "",
         "ao_attempts": 0,
         "ai_overview_raw_text": "",
@@ -628,6 +629,7 @@ if "df" in st.session_state:
 
                 row_result = {
                     "url": page["url"],
+                    "batch_num": b_idx + 1,
                     "prompt_block_sent": page_block,
                     "selected_keyword": page["selected_keyword"],
                     "keyword_source": page["keyword_source"],
@@ -747,37 +749,42 @@ if "results_df" in st.session_state:
             with st.expander("Debug: combined data sent to AI"):
                 url_key = str(row.get("url", "")).replace("/", "_").replace(":", "")
 
-                # Build combined block from stored row data
-                scrape = row.get("page_context_preview", "") or ""
-                aio = row.get("ai_overview_raw_text", "") or ""
-                paa = row.get("paa_raw_text", "") or ""
-                keyword = row.get("selected_keyword", "") or ""
+                # Full batch prompt — the exact combined block sent to AI
+                # containing ALL pages in this batch
+                batch_num = row.get("batch_num", 0)
+                batch_data = st.session_state.get(f"batch_{batch_num}_prompt", {})
+                full_prompt = batch_data.get("prompt", "")
+                batch_urls = batch_data.get("pages", [])
 
-                combined = []
-                combined.append(f"KEYWORD: {keyword}")
-                combined.append("")
-                combined.append("=" * 60)
-                combined.append("PAGE CONTENT (scraped)")
-                combined.append("=" * 60)
-                combined.append(scrape if scrape else "(not scraped)")
-                combined.append("")
-                combined.append("=" * 60)
-                combined.append("GOOGLE AI OVERVIEW")
-                combined.append("=" * 60)
-                combined.append(aio if aio else "(not found)")
-                combined.append("")
-                combined.append("=" * 60)
-                combined.append("PEOPLE ALSO ASK")
-                combined.append("=" * 60)
-                combined.append(paa if paa else "(not found)")
-
-                st.text_area(
-                    label="All data combined (what was assembled for the AI)",
-                    value="\n".join(combined),
-                    height=400,
-                    disabled=True,
-                    key=f"combined_{url_key}"
-                )
+                if full_prompt and full_prompt != f"(building prompt for {len(batch_urls)} pages...)":
+                    n_pages = len(batch_urls)
+                    st.caption(f"Full prompt sent to AI for batch {batch_num} — {n_pages} page(s) combined, {len(full_prompt):,} chars total")
+                    if n_pages > 1:
+                        st.caption("Pages in this batch: " + " | ".join(batch_urls))
+                    st.text_area(
+                        label="Combined prompt (all pages in batch fed to AI in one call)",
+                        value=full_prompt,
+                        height=450,
+                        disabled=True,
+                        key=f"full_prompt_{url_key}"
+                    )
+                else:
+                    st.caption("Full prompt not available — re-run to populate.")
+                    # Fallback: show individual page data
+                    scrape = row.get("page_context_preview", "") or ""
+                    aio = row.get("ai_overview_raw_text", "") or ""
+                    paa = row.get("paa_raw_text", "") or ""
+                    keyword = row.get("selected_keyword", "") or ""
+                    combined = [
+                        f"KEYWORD: {keyword}", "",
+                        "=" * 50, "PAGE CONTENT (scraped)", "=" * 50,
+                        scrape or "(not scraped)", "",
+                        "=" * 50, "GOOGLE AI OVERVIEW", "=" * 50,
+                        aio or "(not found)", "",
+                        "=" * 50, "PEOPLE ALSO ASK", "=" * 50,
+                        paa or "(not found)",
+                    ]
+                    st.text_area("This page data (fallback)", value="\n".join(combined), height=350, disabled=True, key=f"fallback_{url_key}")
 
                 # Signal summary
                 ao_present = row.get("ai_overview_present", False)
