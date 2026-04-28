@@ -146,6 +146,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "paa_raw_debug": "",
         "ao_raw_debug": "",
         "ao_raw_found": False,
+        "ao_attempts": 0,
     }
 
     if not keyword:
@@ -160,7 +161,11 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "load_async_ai_overview": load_async_ai_overview,
     }]
 
-    try:
+    max_attempts = 3
+    last_error = None
+
+    for attempt in range(1, max_attempts + 1):
+      try:
         r = requests.post(
             f"{DFS_BASE}/serp/google/organic/live/advanced",
             headers=_auth_header(login, password),
@@ -237,13 +242,12 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
                     if t not in all_item_types:
                         all_item_types.append(t)
 
-        # asynchronous_ai_overview means Google has one but DFS couldn't
-        # capture the content because it loads via JS after page load
         async_ao_detected = "asynchronous_ai_overview" in all_item_types
+        ao_found = len(ai_sections) > 0
 
-        return {
-            "ai_overview_present": len(ai_sections) > 0,
-            "ai_overview_async_only": async_ao_detected and len(ai_sections) == 0,
+        result = {
+            "ai_overview_present": ao_found,
+            "ai_overview_async_only": async_ao_detected and not ao_found,
             "ai_overview_sections": ai_sections,
             "ai_overview_raw": "\n".join(ai_raw_parts),
             "paa_questions": paa_questions,
@@ -252,9 +256,29 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
             "paa_raw_debug": str(paa_raw_items[:1])[:500] if paa_raw_items else "",
             "ao_raw_debug": str(ao_raw_items[:1])[:800] if ao_raw_items else "",
             "ao_raw_found": len(ao_raw_items) > 0,
+            "ao_attempts": attempt,
         }
 
-    except Exception as e:
+        # AI Overview found — no need to retry
+        if ao_found:
+            return result
+
+        # No AI Overview content yet — retry if attempts remain
+        if attempt < max_attempts:
+            import time as _time
+            _time.sleep(2)
+            continue
+
+        # Exhausted all attempts — return best result so far
+        return result
+
+      except Exception as e:
+        last_error = str(e)
+        if attempt < max_attempts:
+            import time as _time
+            _time.sleep(2)
+            continue
         result = empty.copy()
-        result["error"] = str(e)
+        result["error"] = last_error
+        result["ao_attempts"] = attempt
         return result

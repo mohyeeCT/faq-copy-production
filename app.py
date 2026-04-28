@@ -37,6 +37,7 @@ def _empty_result(
         "serp_item_types": "",
         "ao_raw_debug": "",
         "ao_raw_found": False,
+        "ao_attempts": 0,
         "paa_raw_debug": "",
         "paa_count": 0,
         "paa_questions": "",
@@ -507,6 +508,7 @@ if "df" in st.session_state:
             serp_item_types = serp_data.get("serp_item_types", [])
             ao_raw_debug = serp_data.get("ao_raw_debug", "")
             ao_raw_found = serp_data.get("ao_raw_found", False)
+            ao_attempts = serp_data.get("ao_attempts", 1)
 
             # Step 4: Generate FAQ
             progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: generating FAQs...")
@@ -545,6 +547,7 @@ if "df" in st.session_state:
                     "serp_item_types": ", ".join(serp_item_types),
                     "ao_raw_debug": ao_raw_debug,
                     "ao_raw_found": ao_raw_found,
+                    "ao_attempts": ao_attempts,
                     "paa_raw_debug": serp_data.get("paa_raw_debug", ""),
                     "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
                     "paa_count": len(paa_questions),
@@ -635,7 +638,8 @@ if "results_df" in st.session_state:
                     ao_label = "DETECTED but content not captured (loads async in Google — DFS limitation)"
                 else:
                     ao_label = "NO — not triggered for this keyword"
-                st.caption(f"AI Overview: {ao_label}")
+                attempts = row.get("ao_attempts", 1)
+                st.caption(f"AI Overview: {ao_label} (attempts: {attempts})")
 
                 raw_types = row.get("serp_item_types", "")
                 if raw_types:
