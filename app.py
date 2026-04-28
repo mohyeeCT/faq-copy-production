@@ -9,7 +9,7 @@ from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_data
 from utils.keyword import select_keyword
-from utils.copy_gen import generate_faq, build_faq_schema, _fingerprint_question
+from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question
 from utils.scraper import scrape_page_context
 
 
@@ -134,6 +134,12 @@ with st.sidebar:
         "Number of FAQs per page",
         min_value=3, max_value=10, value=5,
         help="How many Q&A pairs to generate per URL."
+    )
+
+    batch_size = st.slider(
+        "Batch size (pages per AI call)",
+        min_value=1, max_value=15, value=5,
+        help="Group this many pages into one AI call. Higher = better cross-page differentiation. Lower = closer to per-page behaviour. Set to 1 to disable batching."
     )
 
     load_async_ai_overview = st.toggle(
@@ -374,6 +380,7 @@ if "df" in st.session_state:
 
         results = []
         skipped = []
+        pending_pages = []  # pages staged for batch AI generation
         used_question_patterns = []  # tracks fingerprints across all URLs
         progress = st.progress(0, text="Starting...")
         total = len(df_work)
@@ -513,57 +520,117 @@ if "df" in st.session_state:
             ao_raw_found = serp_data.get("ao_raw_found", False)
             ao_attempts = serp_data.get("ao_attempts", 1)
 
-            # Step 4: Generate FAQ
-            progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: generating FAQs...")
+            # Step 4: Stage page data for batch generation
+            pending_pages.append({
+                "row_idx": i,
+                "url": url,
+                "selected_keyword": selected_keyword,
+                "keyword_source": keyword_source,
+                "runner_up": runner_up_kw,
+                "kw_volume": kw_volume,
+                "kw_difficulty": kw_difficulty,
+                "scrape_status": scrape_status,
+                "page_context": page_context,
+                "ai_overview_present": ai_overview_present,
+                "ai_overview_async_only": ai_overview_async_only,
+                "serp_item_types": serp_item_types,
+                "ao_raw_debug": ao_raw_debug,
+                "ao_raw_found": ao_raw_found,
+                "ao_attempts": ao_attempts,
+                "ai_overview_raw_text": serp_data.get("ai_overview_raw", ""),
+                "paa_raw_text": "\n".join(f"Q: {p['question']}\nA: {p['answer']}" for p in paa_items) if paa_items else "",
+                "paa_raw_debug": serp_data.get("paa_raw_debug", ""),
+                "paa_count": len(paa_questions),
+                "paa_questions": paa_questions,
+                # generate_faq_batch inputs
+                "keyword": selected_keyword,
+                "page_type": page_type,
+                "brand_name": brand_name,
+                "business_type": business_type,
+                "h1": h1_value,
+                "ai_overview_sections": ai_overview_sections,
+                "ai_overview_raw": ai_overview_raw,
+                "paa_items": paa_items,
+                "forbidden_phrases": "\n".join(
+                    p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
+                ),
+                "used_question_patterns": list(used_question_patterns),
+            })
+
+        # ── Pass 2: Batch AI generation ──────────────────────────────────────
+        _forbidden_str = "\n".join(
+            p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
+        )
+
+        # Group pending pages into batches of batch_size
+        batches = [pending_pages[k:k + batch_size] for k in range(0, len(pending_pages), batch_size)]
+        total_batches = len(batches)
+
+        for b_idx, batch in enumerate(batches):
+            progress.progress(
+                (b_idx + 1) / (total_batches + 1),
+                text=f"Batch {b_idx + 1}/{total_batches}: generating FAQs for {len(batch)} pages..."
+            )
+
             try:
-                faq_items = generate_faq(
+                batch_results = generate_faq_batch(
                     provider=ai_provider,
                     api_key=ai_key,
-                    keyword=selected_keyword,
-                    page_type=page_type,
-                    brand_name=brand_name,
-                    business_type=business_type,
-                    h1=h1_value,
-                    ai_overview_sections=ai_overview_sections,
-                    ai_overview_raw=ai_overview_raw,
-                    paa_items=paa_items,
+                    pages=batch,
                     num_faqs=num_faqs,
-                    forbidden_phrases="\n".join(
-                        p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
-                    ),
-                    page_context=page_context,
-                    used_question_patterns=list(used_question_patterns),
                 )
+            except Exception as e:
+                # On batch failure, mark all pages in batch as error
+                for page in batch:
+                    skipped.append({"row": page["row_idx"] + 2, "reason": str(e)})
+                    results.append(_empty_result(
+                        page["url"], f"error: {str(e)}", num_faqs,
+                        keyword=page["selected_keyword"], source=page["keyword_source"],
+                        scrape_status=page["scrape_status"]
+                    ))
+                continue
+
+            for local_idx, page in enumerate(batch):
+                faq_items = batch_results.get(local_idx, [])
+
+                if not faq_items:
+                    skipped.append({"row": page["row_idx"] + 2, "reason": "batch returned no FAQs"})
+                    results.append(_empty_result(
+                        page["url"], "error: no FAQs returned", num_faqs,
+                        keyword=page["selected_keyword"], source=page["keyword_source"],
+                        scrape_status=page["scrape_status"]
+                    ))
+                    continue
 
                 schema_raw_json, schema_script_block = build_faq_schema(faq_items)
 
-                # Track question patterns to avoid repetition on subsequent pages
+                # Track patterns
                 for faq in faq_items:
-                    fp = _fingerprint_question(faq.get("question", ""), selected_keyword)
+                    fp = _fingerprint_question(faq.get("question", ""), page["selected_keyword"])
                     if fp and fp not in used_question_patterns:
                         used_question_patterns.append(fp)
 
                 row_result = {
-                    "url": url,
-                    "selected_keyword": selected_keyword,
-                    "keyword_source": keyword_source,
-                    "runner_up": runner_up_kw,
-                    "kw_volume": kw_volume,
-                    "kw_difficulty": kw_difficulty,
-                    "scrape_status": scrape_status,
-                    "page_context_preview": page_context,
-                    "ai_overview_present": ai_overview_present,
-                    "ai_overview_async_only": ai_overview_async_only,
-                    "serp_item_types": ", ".join(serp_item_types),
-                    "ao_raw_debug": ao_raw_debug,
-                    "ao_raw_found": ao_raw_found,
-                    "ao_attempts": ao_attempts,
-                    "ai_overview_raw_text": serp_data.get("ai_overview_raw", ""),
-                    "paa_raw_text": "\n".join(f"Q: {p['question']}\nA: {p['answer']}" for p in paa_items) if paa_items else "",
-                    "paa_raw_debug": serp_data.get("paa_raw_debug", ""),
+                    "url": page["url"],
+                    "selected_keyword": page["selected_keyword"],
+                    "keyword_source": page["keyword_source"],
+                    "runner_up": page["runner_up"],
+                    "kw_volume": page["kw_volume"],
+                    "kw_difficulty": page["kw_difficulty"],
+                    "scrape_status": page["scrape_status"],
+                    "page_context_preview": page["page_context"],
+                    "ai_overview_present": page["ai_overview_present"],
+                    "ai_overview_async_only": page["ai_overview_async_only"],
+                    "serp_item_types": ", ".join(page["serp_item_types"]),
+                    "ao_raw_debug": page["ao_raw_debug"],
+                    "ao_raw_found": page["ao_raw_found"],
+                    "ao_attempts": page["ao_attempts"],
+                    "ai_overview_raw_text": page["ai_overview_raw_text"],
+                    "paa_raw_text": page["paa_raw_text"],
+                    "paa_raw_debug": page["paa_raw_debug"],
                     "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
-                    "paa_count": len(paa_questions),
-                    "paa_questions": " | ".join(paa_questions) if paa_questions else "",
+                    "paa_count": page["paa_count"],
+                    "paa_questions": " | ".join(page["paa_questions"]) if page["paa_questions"] else "",
                     "faq_count": len(faq_items),
                     "faq_schema_json": schema_raw_json,
                     "faq_schema_script": schema_script_block,
@@ -581,14 +648,6 @@ if "df" in st.session_state:
                         row_result[f"faq_{idx + 1}_source"] = ""
 
                 results.append(row_result)
-
-            except Exception as e:
-                skipped.append({"row": i + 2, "reason": str(e)})
-                results.append(_empty_result(
-                    url, f"error: {str(e)}", num_faqs,
-                    keyword=selected_keyword, source=keyword_source,
-                    scrape_status=scrape_status
-                ))
 
             time.sleep(_rate_delays.get(ai_provider, 0.5))
 
