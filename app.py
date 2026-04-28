@@ -744,40 +744,47 @@ if "results_df" in st.session_state:
                 with st.expander("Schema.org JSON-LD (paste into <head>)"):
                     st.code(row["faq_schema_script"], language="html")
 
-            with st.expander("Debug: what the AI was given"):
+            with st.expander("Debug: combined data sent to AI"):
+                url_key = str(row.get("url", "")).replace("/", "_").replace(":", "")
 
-                # Combined prompt block — primary view
-                prompt_block = row.get("prompt_block_sent", "")
-                if prompt_block:
-                    st.caption("Combined data sent to AI for this page (scrape + AIO + PAA):")
-                    st.text_area(
-                        "Prompt block",
-                        value=prompt_block,
-                        height=350,
-                        disabled=True,
-                        key=f"prompt_block_{row['url']}"
-                    )
-                else:
-                    st.caption("Prompt block not stored — re-run to populate.")
+                # Build combined block from stored row data
+                scrape = row.get("page_context_preview", "") or ""
+                aio = row.get("ai_overview_raw_text", "") or ""
+                paa = row.get("paa_raw_text", "") or ""
+                keyword = row.get("selected_keyword", "") or ""
 
-                st.divider()
+                combined = []
+                combined.append(f"KEYWORD: {keyword}")
+                combined.append("")
+                combined.append("=" * 60)
+                combined.append("PAGE CONTENT (scraped)")
+                combined.append("=" * 60)
+                combined.append(scrape if scrape else "(not scraped)")
+                combined.append("")
+                combined.append("=" * 60)
+                combined.append("GOOGLE AI OVERVIEW")
+                combined.append("=" * 60)
+                combined.append(aio if aio else "(not found)")
+                combined.append("")
+                combined.append("=" * 60)
+                combined.append("PEOPLE ALSO ASK")
+                combined.append("=" * 60)
+                combined.append(paa if paa else "(not found)")
+
+                st.text_area(
+                    label="All data combined (what was assembled for the AI)",
+                    value="\n".join(combined),
+                    height=400,
+                    disabled=True,
+                    key=f"combined_{url_key}"
+                )
 
                 # Signal summary
                 ao_present = row.get("ai_overview_present", False)
                 ao_async = row.get("ai_overview_async_only", False)
                 attempts = row.get("ao_attempts", 1)
-                ao_label = "YES" if ao_present else ("DETECTED but not captured (async)" if ao_async else "NO")
-                st.caption(f"AI Overview: {ao_label} (attempts: {attempts})")
-                raw_types = row.get("serp_item_types", "")
-                if raw_types:
-                    st.caption(f"DFS item types: {raw_types}")
-                sc = row.get("page_context_preview", "")
-                st.caption(f"Scrape: {row.get('scrape_status', 'skipped')} — {len(sc)} chars")
-                ao_q = row.get("ao_question_count", 0)
-                paa_q = row.get("paa_count", 0)
-                st.caption(f"FAQ sources: {ao_q} from AI Overview, {paa_q} PAA questions available")
-
-                st.divider()
+                ao_label = "YES" if ao_present else ("DETECTED but not captured" if ao_async else "NO")
+                st.caption(f"AI Overview: {ao_label} | Attempts: {attempts} | Scrape: {row.get('scrape_status', 'n/a')} | PAA: {row.get('paa_count', 0)} questions")
 
                 # Per-FAQ source badges
                 for idx in range(1, _num_faqs + 1):
@@ -787,15 +794,6 @@ if "results_df" in st.session_state:
                         badge = {"ai_overview": "🔵 AI Overview", "paa": "🟢 PAA", "generated": "⚪ Generated"}.get(src, src)
                         st.markdown(f"{badge} — {q}")
 
-                # Raw DFS structures
-                ao_raw = row.get("ao_raw_debug", "")
-                if ao_raw:
-                    with st.expander("AI Overview raw (DFS)"):
-                        st.code(ao_raw)
-                paa_raw = row.get("paa_raw_debug", "")
-                if paa_raw:
-                    with st.expander("PAA raw (DFS)"):
-                        st.code(paa_raw)
     if skipped:
         with st.expander(f"Skipped rows ({skip_count})"):
             st.dataframe(pd.DataFrame(skipped), use_container_width=True)
