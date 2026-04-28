@@ -37,6 +37,10 @@ def _empty_result(
         "serp_item_types": "",
         "ao_raw_debug": "",
         "ao_raw_found": False,
+        "prompt_debug": "",
+        "batch_prompt_sent": "",
+        "batch_num": 0,
+        "prompt_block_sent": "",
         "ao_attempts": 0,
         "ai_overview_raw_text": "",
         "paa_raw_text": "",
@@ -572,13 +576,25 @@ if "df" in st.session_state:
                 text=f"Batch {b_idx + 1}/{total_batches}: generating FAQs for {len(batch)} pages..."
             )
 
+            # Always store batch metadata before the API call so debug is visible even on error
+            batch_prompt_key = f"batch_{b_idx + 1}_prompt"
+            st.session_state[batch_prompt_key] = {
+                "batch_num": b_idx + 1,
+                "pages": [p["url"] for p in batch],
+                "prompt": f"(building prompt for {len(batch)} pages...)",
+                "prompt_chars": 0,
+            }
             try:
-                batch_results = generate_faq_batch(
+                batch_results, batch_prompt_sent, batch_page_debug = generate_faq_batch(
                     provider=ai_provider,
                     api_key=ai_key,
                     pages=batch,
                     num_faqs=num_faqs,
                 )
+                # Update with actual prompt sent
+                st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
+                st.session_state[batch_prompt_key]["prompt_chars"] = len(batch_prompt_sent)
+                st.session_state[batch_prompt_key]["page_blocks"] = batch_page_blocks
             except Exception as e:
                 # On batch failure, mark all pages in batch as error
                 for page in batch:
@@ -610,8 +626,15 @@ if "df" in st.session_state:
                     if fp and fp not in used_question_patterns:
                         used_question_patterns.append(fp)
 
+                # Get this page's specific prompt block
+                page_block = batch_page_blocks[local_idx] if local_idx < len(batch_page_blocks) else ""
+
                 row_result = {
                     "url": page["url"],
+                    "prompt_debug": batch_page_debug.get(local_idx, ""),
+                    "batch_prompt_sent": batch_prompt_sent,
+                    "batch_num": b_idx + 1,
+                    "prompt_block_sent": page_block,
                     "selected_keyword": page["selected_keyword"],
                     "keyword_source": page["keyword_source"],
                     "runner_up": page["runner_up"],
@@ -627,6 +650,12 @@ if "df" in st.session_state:
                     "ao_attempts": page["ao_attempts"],
                     "ai_overview_raw_text": page["ai_overview_raw_text"],
                     "paa_raw_text": page["paa_raw_text"],
+                    "combined_context_sent": "\n\n".join(filter(None, [
+                        f"KEYWORD: {page['selected_keyword']}",
+                        "\n--- PAGE CONTENT ---\n" + page["page_context"] if page.get("page_context") else "",
+                        "\n--- AI OVERVIEW ---\n" + page["ai_overview_raw_text"] if page.get("ai_overview_raw_text") else "",
+                        "\n--- PEOPLE ALSO ASK ---\n" + page["paa_raw_text"] if page.get("paa_raw_text") else "",
+                    ])),
                     "paa_raw_debug": page["paa_raw_debug"],
                     "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
                     "paa_count": page["paa_count"],
@@ -653,6 +682,14 @@ if "df" in st.session_state:
 
         progress.progress(1.0, text="Done.")
 
+        # Collect all batch prompts for debug display
+        batch_debug_list = []
+        for k in range(total_batches):
+            key = f"batch_{k + 1}_prompt"
+            if key in st.session_state:
+                batch_debug_list.append(st.session_state[key])
+        st.session_state["batch_debug_list"] = batch_debug_list
+
         results_df = pd.DataFrame(results)
         st.session_state["results_df"] = results_df
         st.session_state["skipped"] = skipped
@@ -670,6 +707,26 @@ if "results_df" in st.session_state:
 
     st.header("6. Results")
 
+    # Batch debug section — always shown after a run
+    batch_debug_list = st.session_state.get("batch_debug_list", [])
+    with st.expander(f"Batch debug ({len(batch_debug_list)} batch(es) sent to AI)"):
+        if not batch_debug_list:
+            st.caption("No batch data found. This is populated after running — if you just ran, try a manual page refresh.")
+        for b in batch_debug_list:
+            st.markdown(f"**Batch {b['batch_num']}** — {len(b['pages'])} pages, {b['prompt_chars']:,} chars sent to AI")
+            for url in b["pages"]:
+                st.markdown(f"  - {url}")
+            with st.expander(f"Full prompt sent for batch {b['batch_num']}"):
+                st.text_area(
+                    f"Prompt (batch {b['batch_num']})",
+                    value=b["prompt"],
+                    height=400,
+                    disabled=True,
+                    key=f"prompt_display_{b['batch_num']}"
+                )
+            st.divider()
+
+
     ok_count = len(results_df[results_df["status"] == "ok"])
     skip_count = len(skipped)
     m1, m2, m3 = st.columns(3)
@@ -686,79 +743,72 @@ if "results_df" in st.session_state:
     for _, row in results_df.iterrows():
         if row.get("status") != "ok":
             continue
+
+        url_key = str(row.get("url", "")).replace("/", "_").replace(":", "")
+
         with st.expander(f"{row['url']} - {row.get('selected_keyword', '')}"):
+            # FAQs
             for idx in range(1, _num_faqs + 1):
                 q = row.get(f"faq_{idx}_question", "")
                 a = row.get(f"faq_{idx}_answer", "")
                 if q:
-                    st.markdown(f"**Q{idx}: {q}**")
+                    src = row.get(f"faq_{idx}_source", "")
+                    badge = {"ai_overview": "🔵", "paa": "🟢", "generated": "⚪"}.get(src, "")
+                    st.markdown(f"**{badge} Q{idx}: {q}**")
                     st.write(a)
                     st.divider()
 
+            # Schema
             if row.get("faq_schema_script"):
-                with st.expander("Schema.org JSON-LD (paste into <head>)"):
-                    st.code(row["faq_schema_script"], language="html")
+                st.caption("Schema.org JSON-LD:")
+                st.code(row["faq_schema_script"], language="html")
 
-            with st.expander("Debug: what the AI was given"):
-                # AI Overview
-                ao_present = row.get("ai_overview_present", False)
-                ao_async = row.get("ai_overview_async_only", False)
-                if ao_present:
-                    ao_label = "YES — content captured"
-                elif ao_async:
-                    ao_label = "DETECTED but content not captured (loads async in Google — DFS limitation)"
-                else:
-                    ao_label = "NO — not triggered for this keyword"
-                attempts = row.get("ao_attempts", 1)
-                st.caption(f"AI Overview: {ao_label} (attempts: {attempts})")
+        # Debug section — outside the FAQ expander to avoid nesting
+        with st.expander(f"🔍 Debug: data sent to AI — {row.get('url', '')}"):
+            # Signal summary
+            ao_present = row.get("ai_overview_present", False)
+            ao_async = row.get("ai_overview_async_only", False)
+            attempts = row.get("ao_attempts", 1)
+            ao_label = "YES" if ao_present else ("DETECTED but not captured" if ao_async else "NO")
+            st.caption(
+                f"AI Overview: {ao_label} | Attempts: {attempts} | "
+                f"Scrape: {row.get('scrape_status', 'n/a')} | "
+                f"PAA: {row.get('paa_count', 0)} questions | "
+                f"SERP types: {row.get('serp_item_types', 'n/a')}"
+            )
 
-                raw_types = row.get("serp_item_types", "")
-                if raw_types:
-                    st.caption(f"DFS SERP item types returned: {raw_types}")
+            # Full data sent to AI for this page
+            scrape = row.get("page_context_preview", "") or ""
+            aio = row.get("ai_overview_raw_text", "") or ""
+            paa = row.get("paa_raw_text", "") or ""
+            keyword = row.get("selected_keyword", "") or ""
 
-                ao_raw = row.get("ao_raw_debug", "")
-                ao_found = row.get("ao_raw_found", False)
-                if ao_found and not ao_present:
-                    st.warning("AO item found in DFS response but text extraction returned empty — check raw structure below")
-                if ao_raw:
-                    with st.expander("AI Overview raw structure (debug)"):
-                        st.code(ao_raw)
-                elif not ao_found:
-                    st.caption("AO raw: no ai_overview item returned by DFS for this keyword/request")
+            combined = "\n".join([
+                f"KEYWORD: {keyword}",
+                "",
+                "=" * 60,
+                "PAGE CONTENT (scraped)",
+                "=" * 60,
+                scrape or "(not scraped)",
+                "",
+                "=" * 60,
+                "GOOGLE AI OVERVIEW",
+                "=" * 60,
+                aio or "(not found)",
+                "",
+                "=" * 60,
+                "PEOPLE ALSO ASK",
+                "=" * 60,
+                paa or "(not found)",
+            ])
 
-                paa_raw = row.get("paa_raw_debug", "")
-                if paa_raw:
-                    with st.expander("PAA raw structure (debug)"):
-                        st.code(paa_raw)
-                elif "people_also_ask" in raw_types:
-                    st.caption("PAA raw: item found in SERP but items[] was empty or questions had no title field")
-
-                # Question sources
-                ao_q = row.get("ao_question_count", 0)
-                paa_q = row.get("paa_count", 0)
-                st.caption(f"FAQ sources: {ao_q} from AI Overview, {paa_q} PAA questions available")
-
-                # Per-FAQ source badges
-                for idx in range(1, _num_faqs + 1):
-                    q = row.get(f"faq_{idx}_question", "")
-                    src = row.get(f"faq_{idx}_source", "")
-                    if q and src:
-                        badge = {"ai_overview": "🔵 AI Overview", "paa": "🟢 PAA", "generated": "⚪ Generated"}.get(src, src)
-                        st.markdown(f"{badge} — {q}")
-
-                # Scraped content
-                sc = row.get("page_context_preview", "")
-                if sc:
-                    st.caption(f"Scraped page content ({len(sc)} chars)")
-                    st.text_area("Page content sent to AI", value=sc, height=150, disabled=True, key=f"ctx_{row['url']}")
-                else:
-                    st.caption(f"Scrape status: {row.get('scrape_status', 'skipped')} — no page context used.")
-
-                paa = row.get("paa_questions", "")
-                if paa:
-                    st.caption("PAA questions retrieved:")
-                    for q in paa.split(" | "):
-                        st.markdown(f"- {q}")
+            st.text_area(
+                "All data sent to AI",
+                value=combined,
+                height=400,
+                disabled=True,
+                key=f"debug_{url_key}"
+            )
 
     if skipped:
         with st.expander(f"Skipped rows ({skip_count})"):
