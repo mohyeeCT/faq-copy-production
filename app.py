@@ -572,6 +572,14 @@ if "df" in st.session_state:
                 text=f"Batch {b_idx + 1}/{total_batches}: generating FAQs for {len(batch)} pages..."
             )
 
+            # Always store batch metadata before the API call so debug is visible even on error
+            batch_prompt_key = f"batch_{b_idx + 1}_prompt"
+            st.session_state[batch_prompt_key] = {
+                "batch_num": b_idx + 1,
+                "pages": [p["url"] for p in batch],
+                "prompt": f"(building prompt for {len(batch)} pages...)",
+                "prompt_chars": 0,
+            }
             try:
                 batch_results, batch_prompt_sent = generate_faq_batch(
                     provider=ai_provider,
@@ -579,14 +587,9 @@ if "df" in st.session_state:
                     pages=batch,
                     num_faqs=num_faqs,
                 )
-                # Store prompt for debug display
-                batch_prompt_key = f"batch_{b_idx + 1}_prompt"
-                st.session_state[batch_prompt_key] = {
-                    "batch_num": b_idx + 1,
-                    "pages": [p["url"] for p in batch],
-                    "prompt": batch_prompt_sent,
-                    "prompt_chars": len(batch_prompt_sent),
-                }
+                # Update with actual prompt sent
+                st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
+                st.session_state[batch_prompt_key]["prompt_chars"] = len(batch_prompt_sent)
             except Exception as e:
                 # On batch failure, mark all pages in batch as error
                 for page in batch:
@@ -686,23 +689,24 @@ if "results_df" in st.session_state:
 
     st.header("6. Results")
 
-    # Batch debug section
+    # Batch debug section — always shown after a run
     batch_debug_list = st.session_state.get("batch_debug_list", [])
-    if batch_debug_list:
-        with st.expander(f"Batch debug: {len(batch_debug_list)} batch(es) sent to AI"):
-            for b in batch_debug_list:
-                st.markdown(f"**Batch {b['batch_num']}** — {len(b['pages'])} pages, {b['prompt_chars']:,} chars sent to AI")
-                for url in b["pages"]:
-                    st.markdown(f"  - {url}")
-                with st.expander(f"Full prompt sent for batch {b['batch_num']}"):
-                    st.text_area(
-                        f"Prompt (batch {b['batch_num']})",
-                        value=b["prompt"],
-                        height=400,
-                        disabled=True,
-                        key=f"prompt_display_{b['batch_num']}"
-                    )
-                st.divider()
+    with st.expander(f"Batch debug ({len(batch_debug_list)} batch(es) sent to AI)"):
+        if not batch_debug_list:
+            st.caption("No batch data found. This is populated after running — if you just ran, try a manual page refresh.")
+        for b in batch_debug_list:
+            st.markdown(f"**Batch {b['batch_num']}** — {len(b['pages'])} pages, {b['prompt_chars']:,} chars sent to AI")
+            for url in b["pages"]:
+                st.markdown(f"  - {url}")
+            with st.expander(f"Full prompt sent for batch {b['batch_num']}"):
+                st.text_area(
+                    f"Prompt (batch {b['batch_num']})",
+                    value=b["prompt"],
+                    height=400,
+                    disabled=True,
+                    key=f"prompt_display_{b['batch_num']}"
+                )
+            st.divider()
 
 
     ok_count = len(results_df[results_df["status"] == "ok"])
