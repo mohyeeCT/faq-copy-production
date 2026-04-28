@@ -594,7 +594,7 @@ if "df" in st.session_state:
                 # Update with actual prompt sent
                 st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
                 st.session_state[batch_prompt_key]["prompt_chars"] = len(batch_prompt_sent)
-                st.session_state[batch_prompt_key]["page_blocks"] = batch_page_blocks
+                st.session_state[batch_prompt_key]["page_blocks"] = list(batch_page_debug.values())
             except Exception as e:
                 # On batch failure, mark all pages in batch as error
                 for page in batch:
@@ -627,7 +627,7 @@ if "df" in st.session_state:
                         used_question_patterns.append(fp)
 
                 # Get this page's specific prompt block
-                page_block = batch_page_blocks[local_idx] if local_idx < len(batch_page_blocks) else ""
+                page_block = batch_page_debug.get(local_idx, "")
 
                 row_result = {
                     "url": page["url"],
