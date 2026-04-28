@@ -67,6 +67,62 @@ def get_keyword_difficulty(login: str, password: str, keywords: list, location_c
         return {}
 
 
+
+def _extract_ai_overview_text(item: dict) -> str:
+    """Extract AI Overview text from a DFS SERP item.
+
+    Mirrors the SF script approach: no assumptions about block.type,
+    just pull text from wherever it exists in the response.
+
+    Priority order:
+    1. item.items[].text  (structured blocks)
+    2. item.text          (flat text field)
+    3. item.markdown      (markdown fallback for async overviews)
+    """
+    if not item:
+        return ""
+
+    # 1. Try structured items array — map each block's text field
+    blocks = item.get("items") or []
+    if blocks:
+        parts = []
+        for block in blocks:
+            txt = ""
+            if isinstance(block, dict):
+                txt = (
+                    block.get("text", "")
+                    or block.get("content", "")
+                    or ""
+                ).strip()
+            if txt:
+                parts.append(txt)
+        combined = "\n\n".join(parts)
+        if combined:
+            return combined
+
+    # 2. Try flat text field on the item itself
+    flat = (item.get("text") or "").strip()
+    if flat:
+        return flat
+
+    # 3. Try markdown field — present on some async AI Overview responses
+    markdown = (item.get("markdown") or "").strip()
+    if markdown:
+        # Strip markdown syntax to plain text
+        import re
+        markdown = re.sub(r"!\[([^\]]*)\]\((https?://[^\)]+)\)", r"\1", markdown)
+        markdown = re.sub(r"\[([^\]]+)\]\((https?://[^\)]+)\)", r"\1", markdown)
+        markdown = re.sub(r"https?://\S+", "", markdown)
+        markdown = re.sub(r"\*+", "", markdown)
+        markdown = re.sub(r"#+\s*", "", markdown)
+        markdown = re.sub(r"\s+", " ", markdown).strip()
+        if markdown:
+            return markdown
+
+    return ""
+
+
+
 def get_serp_data(login: str, password: str, keyword: str, location_code: int = 2840, load_async_ai_overview: bool = True) -> dict:
     """Single SERP call that returns both AI Overview and PAA data.
 
@@ -98,7 +154,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "location_code": location_code,
         "language_code": "en",
         "depth": 10,
-        "people_also_ask_click_depth": 2,
+        "people_also_ask_click_depth": 4,
         "load_async_ai_overview": load_async_ai_overview,
     }]
 
@@ -125,38 +181,10 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
 
                     # ── AI Overview ──────────────────────────────────────────
                     if item_type in ("ai_overview", "asynchronous_ai_overview"):
-                        for block in (item.get("items") or []):
-                            block_type = block.get("type", "")
-
-                            # Section with a title
-                            if block_type == "ai_overview_element" or block.get("title"):
-                                title = block.get("title", "").strip()
-                                # Content may be nested in sub-items or in text field
-                                content_parts = []
-                                for sub in (block.get("items") or []):
-                                    txt = sub.get("text", "") or sub.get("content", "")
-                                    if txt:
-                                        content_parts.append(txt.strip())
-                                if not content_parts:
-                                    content_parts = [block.get("text", "").strip()]
-
-                                content = " ".join(filter(None, content_parts))
-                                if title or content:
-                                    ai_sections.append({
-                                        "title": title,
-                                        "content": content
-                                    })
-                                    if title:
-                                        ai_raw_parts.append(f"{title}: {content}")
-                                    else:
-                                        ai_raw_parts.append(content)
-
-                            # Plain text block without a title
-                            elif block.get("text"):
-                                txt = block["text"].strip()
-                                if txt:
-                                    ai_sections.append({"title": "", "content": txt})
-                                    ai_raw_parts.append(txt)
+                        ao_text = _extract_ai_overview_text(item)
+                        if ao_text:
+                            ai_sections.append({"title": "", "content": ao_text})
+                            ai_raw_parts.append(ao_text)
 
                     # ── PAA ──────────────────────────────────────────────────
                     if item_type == "people_also_ask":
