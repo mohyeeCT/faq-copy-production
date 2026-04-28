@@ -573,12 +573,20 @@ if "df" in st.session_state:
             )
 
             try:
-                batch_results = generate_faq_batch(
+                batch_results, batch_prompt_sent = generate_faq_batch(
                     provider=ai_provider,
                     api_key=ai_key,
                     pages=batch,
                     num_faqs=num_faqs,
                 )
+                # Store prompt for debug display
+                batch_prompt_key = f"batch_{b_idx + 1}_prompt"
+                st.session_state[batch_prompt_key] = {
+                    "batch_num": b_idx + 1,
+                    "pages": [p["url"] for p in batch],
+                    "prompt": batch_prompt_sent,
+                    "prompt_chars": len(batch_prompt_sent),
+                }
             except Exception as e:
                 # On batch failure, mark all pages in batch as error
                 for page in batch:
@@ -653,6 +661,14 @@ if "df" in st.session_state:
 
         progress.progress(1.0, text="Done.")
 
+        # Collect all batch prompts for debug display
+        batch_debug_list = []
+        for k in range(total_batches):
+            key = f"batch_{k + 1}_prompt"
+            if key in st.session_state:
+                batch_debug_list.append(st.session_state[key])
+        st.session_state["batch_debug_list"] = batch_debug_list
+
         results_df = pd.DataFrame(results)
         st.session_state["results_df"] = results_df
         st.session_state["skipped"] = skipped
@@ -669,6 +685,25 @@ if "results_df" in st.session_state:
     _num_faqs = st.session_state.get("num_faqs", 5)
 
     st.header("6. Results")
+
+    # Batch debug section
+    batch_debug_list = st.session_state.get("batch_debug_list", [])
+    if batch_debug_list:
+        with st.expander(f"Batch debug: {len(batch_debug_list)} batch(es) sent to AI"):
+            for b in batch_debug_list:
+                st.markdown(f"**Batch {b['batch_num']}** — {len(b['pages'])} pages, {b['prompt_chars']:,} chars sent to AI")
+                for url in b["pages"]:
+                    st.markdown(f"  - {url}")
+                with st.expander(f"Full prompt sent for batch {b['batch_num']}"):
+                    st.text_area(
+                        f"Prompt (batch {b['batch_num']})",
+                        value=b["prompt"],
+                        height=400,
+                        disabled=True,
+                        key=f"prompt_display_{b['batch_num']}"
+                    )
+                st.divider()
+
 
     ok_count = len(results_df[results_df["status"] == "ok"])
     skip_count = len(skipped)

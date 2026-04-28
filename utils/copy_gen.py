@@ -458,11 +458,13 @@ def generate_faq_batch(
     api_key: str,
     pages: list,
     num_faqs: int,
-) -> dict:
+) -> tuple:
     """Generate FAQs for multiple pages in a single AI call.
 
     pages: list of page dicts (see _build_batch_prompt for keys)
-    Returns dict keyed by 0-based page index: {0: [faq_items], 1: [...], ...}
+    Returns (results, prompt_sent):
+        results: dict keyed by 0-based page index: {0: [faq_items], 1: [...], ...}
+        prompt_sent: the exact prompt string sent to the AI
     Each faq_item: {"question": str, "answer": str, "source": str}
     """
     fn = _PROVIDER_FN.get(provider)
@@ -489,5 +491,5 @@ def generate_faq_batch(
             })
         results[i] = sanitised
 
-    return results
+    return results, prompt
 
