@@ -650,6 +650,12 @@ if "df" in st.session_state:
                     "ao_attempts": page["ao_attempts"],
                     "ai_overview_raw_text": page["ai_overview_raw_text"],
                     "paa_raw_text": page["paa_raw_text"],
+                    "combined_context_sent": "\n\n".join(filter(None, [
+                        f"KEYWORD: {page['selected_keyword']}",
+                        "\n--- PAGE CONTENT ---\n" + page["page_context"] if page.get("page_context") else "",
+                        "\n--- AI OVERVIEW ---\n" + page["ai_overview_raw_text"] if page.get("ai_overview_raw_text") else "",
+                        "\n--- PEOPLE ALSO ASK ---\n" + page["paa_raw_text"] if page.get("paa_raw_text") else "",
+                    ])),
                     "paa_raw_debug": page["paa_raw_debug"],
                     "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
                     "paa_count": page["paa_count"],
