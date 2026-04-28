@@ -209,16 +209,26 @@ if "df" in st.session_state:
     # ── Section 3: GSC Settings ───────────────────────────────────────────────
 
     st.header("3. GSC Settings")
-    gsc_site_url = st.text_input(
-        "GSC Property URL",
-        placeholder="https://example.com/ or sc-domain:example.com"
+    use_gsc = st.toggle(
+        "Use GSC for keyword selection",
+        value=True,
+        help="When enabled, pulls top queries from GSC to select the target keyword. Disable if you are providing keywords manually in the sheet or want to run without GSC access."
     )
+    gsc_site_url = ""
+    if use_gsc:
+        gsc_site_url = st.text_input(
+            "GSC Property URL",
+            placeholder="https://example.com/ or sc-domain:example.com"
+        )
+    else:
+        st.caption("GSC disabled. Keyword will be taken from the sheet keyword column. Rows with no keyword will be skipped.")
 
     # ── Section 4: Brand Detection ────────────────────────────────────────────
 
     st.header("4. Brand Detection")
 
     detect_ready = (
+        use_gsc and
         sa_file is not None and
         gsc_site_url and
         "df" in st.session_state and
@@ -323,7 +333,7 @@ if "df" in st.session_state:
         sa_file is not None and
         dfs_login and dfs_password and
         ai_key and
-        gsc_site_url and
+        (not use_gsc or gsc_site_url) and
         "df" in st.session_state
     )
 
@@ -335,7 +345,7 @@ if "df" in st.session_state:
     if run_btn:
         df_work = st.session_state["df"].copy()
         sa_info = st.session_state["sa_info"]
-        gsc_client = get_gsc_client(sa_info)
+        gsc_client = get_gsc_client(sa_info) if use_gsc else None
 
         _manual = [t.strip().lower() for t in branded_terms_input.strip().splitlines() if t.strip()]
         _auto = st.session_state.get("confirmed_branded", [])
@@ -386,7 +396,7 @@ if "df" in st.session_state:
             scrape_status = "skipped"
             if enable_scraping:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: scraping page...")
-                scrape_result = scrape_page_context(jina_key, url, max_chars=2000)
+                scrape_result = scrape_page_context(jina_key, url, max_chars=3000)
                 if scrape_result["success"]:
                     page_context = scrape_result["content"]
                     scrape_status = f"ok ({len(page_context)} chars)"
@@ -405,7 +415,7 @@ if "df" in st.session_state:
             if manual_kw:
                 selected_keyword = manual_kw
                 keyword_source = "manual"
-            else:
+            elif use_gsc:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: fetching GSC data...")
                 gsc_queries = get_top_queries_for_url(gsc_client, gsc_site_url, url, top_n=10)
 
@@ -460,6 +470,9 @@ if "df" in st.session_state:
                             keyword_source = f"fallback: no keyword passed scoring (GSC: {_gsc_debug})"
                 else:
                     keyword_source = keyword_source or "fallback: no GSC data"
+            else:
+                # GSC disabled and no manual keyword — skip this row
+                keyword_source = "skipped: GSC disabled and no keyword in sheet"
 
             if not selected_keyword:
                 skipped.append({"row": i + 2, "reason": keyword_source})
