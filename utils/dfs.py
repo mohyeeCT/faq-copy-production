@@ -81,10 +81,12 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
     """
     empty = {
         "ai_overview_present": False,
+        "ai_overview_async_only": False,
         "ai_overview_sections": [],
         "ai_overview_raw": "",
         "paa_questions": [],
         "paa_items": [],
+        "serp_item_types": [],
     }
 
     if not keyword:
@@ -176,12 +178,27 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
                                 "url": paa_el.get("url", "")
                             })
 
+        # Collect all item types for debugging
+        all_item_types = []
+        for task in data.get("tasks", []):
+            for result_block in (task.get("result") or []):
+                for item in (result_block.get("items") or []):
+                    t = item.get("type", "unknown")
+                    if t not in all_item_types:
+                        all_item_types.append(t)
+
+        # asynchronous_ai_overview means Google has one but DFS couldn't
+        # capture the content because it loads via JS after page load
+        async_ao_detected = "asynchronous_ai_overview" in all_item_types
+
         return {
             "ai_overview_present": len(ai_sections) > 0,
+            "ai_overview_async_only": async_ao_detected and len(ai_sections) == 0,
             "ai_overview_sections": ai_sections,
             "ai_overview_raw": "\n".join(ai_raw_parts),
             "paa_questions": paa_questions,
             "paa_items": paa_items,
+            "serp_item_types": all_item_types,
         }
 
     except Exception as e:

@@ -33,6 +33,8 @@ def _empty_result(
         "scrape_status": scrape_status,
         "page_context_preview": "",
         "ai_overview_present": False,
+        "ai_overview_async_only": False,
+        "serp_item_types": "",
         "paa_count": 0,
         "paa_questions": "",
         "ao_question_count": 0,
@@ -486,10 +488,12 @@ if "df" in st.session_state:
                 dfs_login, dfs_password, selected_keyword, location_code=int(location_code)
             )
             ai_overview_present = serp_data["ai_overview_present"]
+            ai_overview_async_only = serp_data.get("ai_overview_async_only", False)
             ai_overview_sections = serp_data["ai_overview_sections"]
             ai_overview_raw = serp_data["ai_overview_raw"]
             paa_items = serp_data["paa_items"]
             paa_questions = serp_data["paa_questions"]
+            serp_item_types = serp_data.get("serp_item_types", [])
 
             # Step 4: Generate FAQ
             progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: generating FAQs...")
@@ -524,6 +528,8 @@ if "df" in st.session_state:
                     "scrape_status": scrape_status,
                     "page_context_preview": page_context,
                     "ai_overview_present": ai_overview_present,
+                    "ai_overview_async_only": ai_overview_async_only,
+                    "serp_item_types": ", ".join(serp_item_types),
                     "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
                     "paa_count": len(paa_questions),
                     "paa_questions": " | ".join(paa_questions) if paa_questions else "",
@@ -606,7 +612,18 @@ if "results_df" in st.session_state:
             with st.expander("Debug: what the AI was given"):
                 # AI Overview
                 ao_present = row.get("ai_overview_present", False)
-                st.caption(f"AI Overview: {'YES' if ao_present else 'NO — fell back to PAA + page context'}")
+                ao_async = row.get("ai_overview_async_only", False)
+                if ao_present:
+                    ao_label = "YES — content captured"
+                elif ao_async:
+                    ao_label = "DETECTED but content not captured (loads async in Google — DFS limitation)"
+                else:
+                    ao_label = "NO — not triggered for this keyword"
+                st.caption(f"AI Overview: {ao_label}")
+
+                raw_types = row.get("serp_item_types", "")
+                if raw_types:
+                    st.caption(f"DFS SERP item types returned: {raw_types}")
 
                 # Question sources
                 ao_q = row.get("ao_question_count", 0)
