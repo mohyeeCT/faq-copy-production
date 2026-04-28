@@ -71,6 +71,25 @@ _BIZ_CONTEXT = {
 }
 
 
+def _fingerprint_question(question: str, keyword: str = "") -> str:
+    """Strip keyword/brand and normalise a question to a pattern string.
+    Used to detect structurally similar questions across different pages.
+    e.g. "Does fierce fruit raspberry puree contain added sugar?" ->
+         "does contain added sugar?"
+    """
+    import re
+    q = question.lower().strip()
+    # Remove the keyword words from the question
+    if keyword:
+        for word in re.findall(r"[a-z]+", keyword.lower()):
+            if len(word) > 2:
+                q = re.sub(r"\b" + re.escape(word) + r"\b", "", q)
+    # Collapse whitespace
+    q = re.sub(r"\s+", " ", q).strip()
+    return q
+
+
+
 def _build_prompt(
     keyword: str,
     page_type: str,
@@ -83,6 +102,7 @@ def _build_prompt(
     num_faqs: int,
     forbidden_phrases: str,
     page_context: str,
+    used_question_patterns: list = None,
 ) -> str:
     biz_ctx = _BIZ_CONTEXT.get(business_type, _BIZ_CONTEXT["general"])
     brand_line = f"Brand name: '{brand_name}'. Use exact casing throughout." if brand_name else "No brand name required."
@@ -96,6 +116,17 @@ def _build_prompt(
         )
     else:
         context_block = ""
+
+    # Used question patterns from previous pages in this run
+    if used_question_patterns:
+        patterns_list = "\n".join(f"- {p}" for p in used_question_patterns[:20])
+        used_block = (
+            "QUESTION PATTERNS ALREADY USED ON OTHER PAGES IN THIS RUN (do NOT generate "
+            "questions that match these patterns, even with a different product name):\n"
+            + patterns_list
+        )
+    else:
+        used_block = ""
 
     # ── AI Overview block (priority 1) ────────────────────────────────────
     if ai_overview_sections:
@@ -130,6 +161,8 @@ def _build_prompt(
     else:
         paa_block = "No PAA data available."
 
+    used_block_str = f"\n{used_block}\n" if used_block else ""
+
     return f"""You are an expert SEO copywriter writing FAQ content for a web page. Your job is to generate questions that real buyers or visitors would ask about THIS SPECIFIC PAGE, then answer them in a way that could rank in Google AI Overviews.
 
 Target keyword: {keyword}
@@ -144,13 +177,15 @@ Business type context: {biz_ctx}
 {ao_block}
 
 {paa_block}
-
+{used_block_str}
 YOUR TASK:
 Generate {num_faqs} FAQ questions that are directly relevant to this specific page and keyword. Use the AI Overview and PAA data above as research signals to understand what users want to know — but do NOT copy or rephrase those questions verbatim. Only use a PAA or AI Overview question if it is genuinely relevant to what this page is about.
 
 For each question:
+- Focus on what is UNIQUE and SPECIFIC to this product or page — not questions that would apply equally to any product in the same category (e.g. avoid generic shipping, allergen, or storage questions unless the page has truly distinctive information about them)
 - It must relate directly to the page content, keyword, and what a visitor to this page would actually want to know
-- Reject any signal question that is too generic, off-topic, or does not match the page purpose (e.g. trivia questions, broad definitional questions unrelated to the page)
+- Reject any signal question that is too generic, off-topic, or does not match the page purpose
+- Do NOT repeat the structural pattern of any question listed in "QUESTION PATTERNS ALREADY USED" above
 - Lead the answer with a direct, complete response in the first sentence
 - Keep answers 40 to 80 words, written for featured snippet format
 - No em dashes. No filler openers (never: "Great question", "Certainly", "Of course", "Absolutely")
@@ -260,6 +295,7 @@ def generate_faq(
     num_faqs: int,
     forbidden_phrases: str = "",
     page_context: str = "",
+    used_question_patterns: list = None,
 ) -> list:
     """Generate FAQ Q&A pairs using the selected AI provider.
 
@@ -283,6 +319,7 @@ def generate_faq(
         num_faqs=num_faqs,
         forbidden_phrases=forbidden_phrases,
         page_context=page_context,
+        used_question_patterns=used_question_patterns,
     )
 
     raw = fn(api_key, prompt)

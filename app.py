@@ -9,7 +9,7 @@ from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_data
 from utils.keyword import select_keyword
-from utils.copy_gen import generate_faq, build_faq_schema
+from utils.copy_gen import generate_faq, build_faq_schema, _fingerprint_question
 from utils.scraper import scrape_page_context
 
 
@@ -374,6 +374,7 @@ if "df" in st.session_state:
 
         results = []
         skipped = []
+        used_question_patterns = []  # tracks fingerprints across all URLs
         progress = st.progress(0, text="Starting...")
         total = len(df_work)
 
@@ -531,9 +532,16 @@ if "df" in st.session_state:
                         p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
                     ),
                     page_context=page_context,
+                    used_question_patterns=list(used_question_patterns),
                 )
 
                 schema_raw_json, schema_script_block = build_faq_schema(faq_items)
+
+                # Track question patterns to avoid repetition on subsequent pages
+                for faq in faq_items:
+                    fp = _fingerprint_question(faq.get("question", ""), selected_keyword)
+                    if fp and fp not in used_question_patterns:
+                        used_question_patterns.append(fp)
 
                 row_result = {
                     "url": url,
