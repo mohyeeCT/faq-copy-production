@@ -793,6 +793,8 @@ if "results_df" in st.session_state:
                 "ao_question_count": "FAQs from AI Overview",
                 "paa_count": "PAA Questions Found",
                 "faq_count": "FAQs Generated",
+                "combined_context_sent": "Context Sent to AI",
+                "combined_context_sent": "Context Sent to AI",
                 "faq_schema_json": "FAQ Schema JSON-LD",
                 "status": "FAQ Status",
             }
