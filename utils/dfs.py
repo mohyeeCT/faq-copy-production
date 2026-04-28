@@ -172,9 +172,15 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
                             if not q or q in paa_questions:
                                 continue
                             paa_questions.append(q)
-                            # Extract best available answer snippet
+                            # Extract answer from expanded_element (DFS structure)
+                            # Falls back to items[] for older response formats
                             answer = ""
-                            for result_item in (paa_el.get("items") or []):
+                            answer_source = (
+                                paa_el.get("expanded_element") or
+                                paa_el.get("items") or
+                                []
+                            )
+                            for result_item in answer_source:
                                 answer = (
                                     result_item.get("description", "")
                                     or result_item.get("text", "")
