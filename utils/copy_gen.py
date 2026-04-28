@@ -339,6 +339,8 @@ def generate_faq(
     return sanitised
 
 
+_last_batch_page_blocks: list = []  # stores per-page prompt blocks from last batch call
+
 def _build_batch_prompt(pages: list, num_faqs: int) -> str:
     """Build a single prompt for multiple pages grouped by category.
 
@@ -410,6 +412,10 @@ Business type: {biz_ctx}
         blocks.append(block.strip())
 
     pages_text = "\n\n".join(blocks)
+
+    # Also return individual page blocks for per-page debug display
+    global _last_batch_page_blocks
+    _last_batch_page_blocks = blocks  # overwritten each call
 
     return f"""You are an expert SEO copywriter. Generate FAQ content for {len(pages)} web pages listed below.
 
@@ -491,5 +497,7 @@ def generate_faq_batch(
             })
         results[i] = sanitised
 
-    return results, prompt
+    import utils.copy_gen as _self
+    page_blocks = list(_self._last_batch_page_blocks)
+    return results, prompt, page_blocks
 

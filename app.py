@@ -37,6 +37,7 @@ def _empty_result(
         "serp_item_types": "",
         "ao_raw_debug": "",
         "ao_raw_found": False,
+        "prompt_block_sent": "",
         "ao_attempts": 0,
         "ai_overview_raw_text": "",
         "paa_raw_text": "",
@@ -581,7 +582,7 @@ if "df" in st.session_state:
                 "prompt_chars": 0,
             }
             try:
-                batch_results, batch_prompt_sent = generate_faq_batch(
+                batch_results, batch_prompt_sent, batch_page_blocks = generate_faq_batch(
                     provider=ai_provider,
                     api_key=ai_key,
                     pages=batch,
@@ -590,6 +591,7 @@ if "df" in st.session_state:
                 # Update with actual prompt sent
                 st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
                 st.session_state[batch_prompt_key]["prompt_chars"] = len(batch_prompt_sent)
+                st.session_state[batch_prompt_key]["page_blocks"] = batch_page_blocks
             except Exception as e:
                 # On batch failure, mark all pages in batch as error
                 for page in batch:
@@ -621,8 +623,12 @@ if "df" in st.session_state:
                     if fp and fp not in used_question_patterns:
                         used_question_patterns.append(fp)
 
+                # Get this page's specific prompt block
+                page_block = batch_page_blocks[local_idx] if local_idx < len(batch_page_blocks) else ""
+
                 row_result = {
                     "url": page["url"],
+                    "prompt_block_sent": page_block,
                     "selected_keyword": page["selected_keyword"],
                     "keyword_source": page["keyword_source"],
                     "runner_up": page["runner_up"],
@@ -739,43 +745,39 @@ if "results_df" in st.session_state:
                     st.code(row["faq_schema_script"], language="html")
 
             with st.expander("Debug: what the AI was given"):
-                # AI Overview
+
+                # Combined prompt block — primary view
+                prompt_block = row.get("prompt_block_sent", "")
+                if prompt_block:
+                    st.caption("Combined data sent to AI for this page (scrape + AIO + PAA):")
+                    st.text_area(
+                        "Prompt block",
+                        value=prompt_block,
+                        height=350,
+                        disabled=True,
+                        key=f"prompt_block_{row['url']}"
+                    )
+                else:
+                    st.caption("Prompt block not stored — re-run to populate.")
+
+                st.divider()
+
+                # Signal summary
                 ao_present = row.get("ai_overview_present", False)
                 ao_async = row.get("ai_overview_async_only", False)
-                if ao_present:
-                    ao_label = "YES — content captured"
-                elif ao_async:
-                    ao_label = "DETECTED but content not captured (loads async in Google — DFS limitation)"
-                else:
-                    ao_label = "NO — not triggered for this keyword"
                 attempts = row.get("ao_attempts", 1)
+                ao_label = "YES" if ao_present else ("DETECTED but not captured (async)" if ao_async else "NO")
                 st.caption(f"AI Overview: {ao_label} (attempts: {attempts})")
-
                 raw_types = row.get("serp_item_types", "")
                 if raw_types:
-                    st.caption(f"DFS SERP item types returned: {raw_types}")
-
-                ao_raw = row.get("ao_raw_debug", "")
-                ao_found = row.get("ao_raw_found", False)
-                if ao_found and not ao_present:
-                    st.warning("AO item found in DFS response but text extraction returned empty — check raw structure below")
-                if ao_raw:
-                    with st.expander("AI Overview raw structure (debug)"):
-                        st.code(ao_raw)
-                elif not ao_found:
-                    st.caption("AO raw: no ai_overview item returned by DFS for this keyword/request")
-
-                paa_raw = row.get("paa_raw_debug", "")
-                if paa_raw:
-                    with st.expander("PAA raw structure (debug)"):
-                        st.code(paa_raw)
-                elif "people_also_ask" in raw_types:
-                    st.caption("PAA raw: item found in SERP but items[] was empty or questions had no title field")
-
-                # Question sources
+                    st.caption(f"DFS item types: {raw_types}")
+                sc = row.get("page_context_preview", "")
+                st.caption(f"Scrape: {row.get('scrape_status', 'skipped')} — {len(sc)} chars")
                 ao_q = row.get("ao_question_count", 0)
                 paa_q = row.get("paa_count", 0)
                 st.caption(f"FAQ sources: {ao_q} from AI Overview, {paa_q} PAA questions available")
+
+                st.divider()
 
                 # Per-FAQ source badges
                 for idx in range(1, _num_faqs + 1):
@@ -785,20 +787,15 @@ if "results_df" in st.session_state:
                         badge = {"ai_overview": "🔵 AI Overview", "paa": "🟢 PAA", "generated": "⚪ Generated"}.get(src, src)
                         st.markdown(f"{badge} — {q}")
 
-                # Scraped content
-                sc = row.get("page_context_preview", "")
-                if sc:
-                    st.caption(f"Scraped page content ({len(sc)} chars)")
-                    st.text_area("Page content sent to AI", value=sc, height=150, disabled=True, key=f"ctx_{row['url']}")
-                else:
-                    st.caption(f"Scrape status: {row.get('scrape_status', 'skipped')} — no page context used.")
-
-                paa = row.get("paa_questions", "")
-                if paa:
-                    st.caption("PAA questions retrieved:")
-                    for q in paa.split(" | "):
-                        st.markdown(f"- {q}")
-
+                # Raw DFS structures
+                ao_raw = row.get("ao_raw_debug", "")
+                if ao_raw:
+                    with st.expander("AI Overview raw (DFS)"):
+                        st.code(ao_raw)
+                paa_raw = row.get("paa_raw_debug", "")
+                if paa_raw:
+                    with st.expander("PAA raw (DFS)"):
+                        st.code(paa_raw)
     if skipped:
         with st.expander(f"Skipped rows ({skip_count})"):
             st.dataframe(pd.DataFrame(skipped), use_container_width=True)
