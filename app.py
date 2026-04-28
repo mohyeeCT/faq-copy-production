@@ -37,6 +37,8 @@ def _empty_result(
         "serp_item_types": "",
         "ao_raw_debug": "",
         "ao_raw_found": False,
+        "prompt_debug": "",
+        "batch_prompt_sent": "",
         "batch_num": 0,
         "prompt_block_sent": "",
         "ao_attempts": 0,
@@ -583,7 +585,7 @@ if "df" in st.session_state:
                 "prompt_chars": 0,
             }
             try:
-                batch_results, batch_prompt_sent, batch_page_blocks = generate_faq_batch(
+                batch_results, batch_prompt_sent, batch_page_debug = generate_faq_batch(
                     provider=ai_provider,
                     api_key=ai_key,
                     pages=batch,
@@ -629,6 +631,8 @@ if "df" in st.session_state:
 
                 row_result = {
                     "url": page["url"],
+                    "prompt_debug": batch_page_debug.get(local_idx, ""),
+                    "batch_prompt_sent": batch_prompt_sent,
                     "batch_num": b_idx + 1,
                     "prompt_block_sent": page_block,
                     "selected_keyword": page["selected_keyword"],

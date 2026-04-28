@@ -467,11 +467,10 @@ def generate_faq_batch(
 ) -> tuple:
     """Generate FAQs for multiple pages in a single AI call.
 
-    pages: list of page dicts (see _build_batch_prompt for keys)
-    Returns (results, prompt_sent):
-        results: dict keyed by 0-based page index: {0: [faq_items], 1: [...], ...}
-        prompt_sent: the exact prompt string sent to the AI
-    Each faq_item: {"question": str, "answer": str, "source": str}
+    Returns (results, prompt_sent, page_debug_prompts):
+        results: dict keyed by 0-based index -> list of faq dicts
+        prompt_sent: full prompt string sent to the AI
+        page_debug_prompts: dict keyed by 0-based index -> per-page context summary for debug
     """
     fn = _PROVIDER_FN.get(provider)
     if not fn:
@@ -481,10 +480,43 @@ def generate_faq_batch(
     raw = fn(api_key, prompt)
     parsed = _parse_batch_json(raw, len(pages))
 
+    # Build per-page debug summaries showing exactly what context the AI received
+    page_debug_prompts = {}
+    for i, page in enumerate(pages):
+        biz_ctx = _BIZ_CONTEXT.get(page.get("business_type", "general"), _BIZ_CONTEXT["general"])
+        ao_sections = page.get("ai_overview_sections", [])
+        paa_items_p = page.get("paa_items", [])
+        used = page.get("used_question_patterns", [])
+
+        ao_text = ("\n".join(
+            f"- {s.get('content', s.get('title', ''))}" for s in ao_sections
+        ) if ao_sections else "Not available")
+
+        paa_text = ("\n".join(
+            f"- Q: {p['question']}" + (f"\n  A: {p['answer'][:120]}" if p.get("answer") else "")
+            for p in paa_items_p[:8]
+        ) if paa_items_p else "Not available")
+
+        used_text = ("\n".join(f"- {u}" for u in used[:15]) if used else "None")
+
+        ctx = page.get("page_context", "") or "Not scraped"
+
+        page_debug_prompts[i] = (
+            f"=== SIGNALS SENT TO AI ===\n\n"
+            f"KEYWORD: {page.get('keyword', '')}\n"
+            f"PAGE TYPE: {page.get('page_type', '')}\n"
+            f"BUSINESS TYPE: {biz_ctx}\n"
+            f"H1: {page.get('h1', '') or 'not provided'}\n"
+            f"BRAND: {page.get('brand_name', '') or 'not provided'}\n\n"
+            f"--- PAGE CONTENT EXCERPT ---\n{ctx}\n\n"
+            f"--- AI OVERVIEW ---\n{ao_text}\n\n"
+            f"--- PEOPLE ALSO ASK ---\n{paa_text}\n\n"
+            f"--- USED QUESTION PATTERNS (avoid) ---\n{used_text}"
+        )
+
     results = {}
     for i, page in enumerate(pages):
         brand_name = page.get("brand_name", "")
-        keyword = page.get("keyword", "")
         raw_items = parsed.get(str(i + 1), [])
         sanitised = []
         for item in raw_items:
@@ -497,7 +529,4 @@ def generate_faq_batch(
             })
         results[i] = sanitised
 
-    import utils.copy_gen as _self
-    page_blocks = list(_self._last_batch_page_blocks)
-    return results, prompt, page_blocks
-
+    return results, prompt, page_debug_prompts
