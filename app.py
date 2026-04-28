@@ -737,73 +737,72 @@ if "results_df" in st.session_state:
     for _, row in results_df.iterrows():
         if row.get("status") != "ok":
             continue
+
+        url_key = str(row.get("url", "")).replace("/", "_").replace(":", "")
+
         with st.expander(f"{row['url']} - {row.get('selected_keyword', '')}"):
+            # FAQs
             for idx in range(1, _num_faqs + 1):
                 q = row.get(f"faq_{idx}_question", "")
                 a = row.get(f"faq_{idx}_answer", "")
                 if q:
-                    st.markdown(f"**Q{idx}: {q}**")
+                    src = row.get(f"faq_{idx}_source", "")
+                    badge = {"ai_overview": "🔵", "paa": "🟢", "generated": "⚪"}.get(src, "")
+                    st.markdown(f"**{badge} Q{idx}: {q}**")
                     st.write(a)
                     st.divider()
 
+            # Schema
             if row.get("faq_schema_script"):
-                with st.expander("Schema.org JSON-LD (paste into <head>)"):
-                    st.code(row["faq_schema_script"], language="html")
+                st.caption("Schema.org JSON-LD:")
+                st.code(row["faq_schema_script"], language="html")
 
-            with st.expander("Debug: combined data sent to AI"):
-                url_key = str(row.get("url", "")).replace("/", "_").replace(":", "")
+        # Debug section — outside the FAQ expander to avoid nesting
+        with st.expander(f"🔍 Debug: data sent to AI — {row.get('url', '')}"):
+            # Signal summary
+            ao_present = row.get("ai_overview_present", False)
+            ao_async = row.get("ai_overview_async_only", False)
+            attempts = row.get("ao_attempts", 1)
+            ao_label = "YES" if ao_present else ("DETECTED but not captured" if ao_async else "NO")
+            st.caption(
+                f"AI Overview: {ao_label} | Attempts: {attempts} | "
+                f"Scrape: {row.get('scrape_status', 'n/a')} | "
+                f"PAA: {row.get('paa_count', 0)} questions | "
+                f"SERP types: {row.get('serp_item_types', 'n/a')}"
+            )
 
-                # Full batch prompt — the exact combined block sent to AI
-                # containing ALL pages in this batch
-                batch_num = row.get("batch_num", 0)
-                batch_data = st.session_state.get(f"batch_{batch_num}_prompt", {})
-                full_prompt = batch_data.get("prompt", "")
-                batch_urls = batch_data.get("pages", [])
+            # Full data sent to AI for this page
+            scrape = row.get("page_context_preview", "") or ""
+            aio = row.get("ai_overview_raw_text", "") or ""
+            paa = row.get("paa_raw_text", "") or ""
+            keyword = row.get("selected_keyword", "") or ""
 
-                if full_prompt and full_prompt != f"(building prompt for {len(batch_urls)} pages...)":
-                    n_pages = len(batch_urls)
-                    st.caption(f"Full prompt sent to AI for batch {batch_num} — {n_pages} page(s) combined, {len(full_prompt):,} chars total")
-                    if n_pages > 1:
-                        st.caption("Pages in this batch: " + " | ".join(batch_urls))
-                    st.text_area(
-                        label="Combined prompt (all pages in batch fed to AI in one call)",
-                        value=full_prompt,
-                        height=450,
-                        disabled=True,
-                        key=f"full_prompt_{url_key}"
-                    )
-                else:
-                    st.caption("Full prompt not available — re-run to populate.")
-                    # Fallback: show individual page data
-                    scrape = row.get("page_context_preview", "") or ""
-                    aio = row.get("ai_overview_raw_text", "") or ""
-                    paa = row.get("paa_raw_text", "") or ""
-                    keyword = row.get("selected_keyword", "") or ""
-                    combined = [
-                        f"KEYWORD: {keyword}", "",
-                        "=" * 50, "PAGE CONTENT (scraped)", "=" * 50,
-                        scrape or "(not scraped)", "",
-                        "=" * 50, "GOOGLE AI OVERVIEW", "=" * 50,
-                        aio or "(not found)", "",
-                        "=" * 50, "PEOPLE ALSO ASK", "=" * 50,
-                        paa or "(not found)",
-                    ]
-                    st.text_area("This page data (fallback)", value="\n".join(combined), height=350, disabled=True, key=f"fallback_{url_key}")
+            combined = "\n".join([
+                f"KEYWORD: {keyword}",
+                "",
+                "=" * 60,
+                "PAGE CONTENT (scraped)",
+                "=" * 60,
+                scrape or "(not scraped)",
+                "",
+                "=" * 60,
+                "GOOGLE AI OVERVIEW",
+                "=" * 60,
+                aio or "(not found)",
+                "",
+                "=" * 60,
+                "PEOPLE ALSO ASK",
+                "=" * 60,
+                paa or "(not found)",
+            ])
 
-                # Signal summary
-                ao_present = row.get("ai_overview_present", False)
-                ao_async = row.get("ai_overview_async_only", False)
-                attempts = row.get("ao_attempts", 1)
-                ao_label = "YES" if ao_present else ("DETECTED but not captured" if ao_async else "NO")
-                st.caption(f"AI Overview: {ao_label} | Attempts: {attempts} | Scrape: {row.get('scrape_status', 'n/a')} | PAA: {row.get('paa_count', 0)} questions")
-
-                # Per-FAQ source badges
-                for idx in range(1, _num_faqs + 1):
-                    q = row.get(f"faq_{idx}_question", "")
-                    src = row.get(f"faq_{idx}_source", "")
-                    if q and src:
-                        badge = {"ai_overview": "🔵 AI Overview", "paa": "🟢 PAA", "generated": "⚪ Generated"}.get(src, src)
-                        st.markdown(f"{badge} — {q}")
+            st.text_area(
+                "All data sent to AI",
+                value=combined,
+                height=400,
+                disabled=True,
+                key=f"debug_{url_key}"
+            )
 
     if skipped:
         with st.expander(f"Skipped rows ({skip_count})"):
