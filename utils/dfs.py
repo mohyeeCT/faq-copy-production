@@ -67,7 +67,7 @@ def get_keyword_difficulty(login: str, password: str, keywords: list, location_c
         return {}
 
 
-def get_serp_data(login: str, password: str, keyword: str, location_code: int = 2840) -> dict:
+def get_serp_data(login: str, password: str, keyword: str, location_code: int = 2840, load_async_ai_overview: bool = True) -> dict:
     """Single SERP call that returns both AI Overview and PAA data.
 
     Returns:
@@ -99,6 +99,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "language_code": "en",
         "depth": 10,
         "people_also_ask_click_depth": 2,
+        "load_async_ai_overview": load_async_ai_overview,
     }]
 
     try:

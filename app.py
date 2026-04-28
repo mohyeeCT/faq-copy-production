@@ -131,6 +131,12 @@ with st.sidebar:
         help="How many Q&A pairs to generate per URL."
     )
 
+    load_async_ai_overview = st.toggle(
+        "Load async AI Overview",
+        value=True,
+        help="Fetches AI Overview content even when it loads asynchronously in Google. Doubles the DFS cost for that call (~$0.001 per keyword). Disable to reduce cost on large runs."
+    )
+
     forbidden_phrases = st.text_area(
         "Forbidden Phrases (one per line)",
         placeholder="best in class\nworld-class\namazing",
@@ -486,7 +492,9 @@ if "df" in st.session_state:
             # Step 3: Fetch AI Overview + PAA in one SERP call
             progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: fetching AI Overview + PAA...")
             serp_data = get_serp_data(
-                dfs_login, dfs_password, selected_keyword, location_code=int(location_code)
+                dfs_login, dfs_password, selected_keyword,
+                location_code=int(location_code),
+                load_async_ai_overview=load_async_ai_overview
             )
             ai_overview_present = serp_data["ai_overview_present"]
             ai_overview_async_only = serp_data.get("ai_overview_async_only", False)
