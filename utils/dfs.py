@@ -226,76 +226,6 @@ def _extract_paa_answer(paa_el: dict) -> str:
 
 
 
-def _fetch_paa_answer_fallback(login: str, password: str, question: str, location_code: int = 2840) -> str:
-    """Fire a targeted DFS search for a PAA question to retrieve its answer.
-
-    Searches the question as a keyword and extracts the best available
-    answer from: answer_box → featured_snippet → first organic description.
-    Used when the main SERP call returns a PAA question with no answer.
-    """
-    if not question:
-        return ""
-
-    payload = [{
-        "keyword": question,
-        "location_code": location_code,
-        "language_code": "en",
-        "depth": 5,
-    }]
-
-    try:
-        r = requests.post(
-            f"{DFS_BASE}/serp/google/organic/live/advanced",
-            headers=_auth_header(login, password),
-            json=payload,
-            timeout=30
-        )
-        r.raise_for_status()
-        data = r.json()
-
-        items = []
-        for task in data.get("tasks", []):
-            for result_block in (task.get("result") or []):
-                items = result_block.get("items") or []
-                break
-
-        # Priority 1: answer_box
-        for item in items:
-            if item.get("type") == "answer_box":
-                answer = (
-                    item.get("text", "")
-                    or item.get("description", "")
-                    or item.get("answer", "")
-                    or ""
-                ).strip()
-                if answer:
-                    return answer
-
-        # Priority 2: featured_snippet
-        for item in items:
-            if item.get("type") == "featured_snippet":
-                answer = (
-                    item.get("description", "")
-                    or item.get("text", "")
-                    or ""
-                ).strip()
-                if answer:
-                    return answer
-
-        # Priority 3: first organic result description
-        for item in items:
-            if item.get("type") == "organic":
-                answer = (item.get("description", "") or "").strip()
-                if answer:
-                    return answer
-
-        return ""
-
-    except Exception:
-        return ""
-
-
-
 def get_serp_data(login: str, password: str, keyword: str, location_code: int = 2840, load_async_ai_overview: bool = True) -> dict:
     """Single SERP call that returns both AI Overview and PAA data.
 
@@ -387,18 +317,8 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
                             paa_items.append({
                                 "question": q,
                                 "answer": answer,
-                                "url": paa_el.get("url", ""),
-                                "_needs_fallback": not answer,
+                                "url": paa_el.get("url", "")
                             })
-
-        # Fallback: fetch answers for any PAA items that came back blank
-        for paa_item in paa_items:
-            if paa_item.pop("_needs_fallback", False) and not paa_item["answer"]:
-                fallback_answer = _fetch_paa_answer_fallback(
-                    login, password, paa_item["question"], location_code
-                )
-                if fallback_answer:
-                    paa_item["answer"] = fallback_answer
 
         # Collect all item types for debugging
         all_item_types = []
