@@ -53,10 +53,8 @@ def _empty_result(
         "faq_schema_script": "",
         "status": status,
     }
-    for idx in range(1, num_faqs + 1):
-        r[f"faq_{idx}_question"] = ""
-        r[f"faq_{idx}_answer"] = ""
-        r[f"faq_{idx}_source"] = ""
+    r["faq_combined"] = ""
+    r["faq_sources"] = ""
     return r
 
 
@@ -660,15 +658,19 @@ if "df" in st.session_state:
                     "status": "ok"
                 }
 
-                for idx in range(num_faqs):
-                    if idx < len(faq_items):
-                        row_result[f"faq_{idx + 1}_question"] = faq_items[idx]["question"]
-                        row_result[f"faq_{idx + 1}_answer"] = faq_items[idx]["answer"]
-                        row_result[f"faq_{idx + 1}_source"] = faq_items[idx].get("source", "generated")
-                    else:
-                        row_result[f"faq_{idx + 1}_question"] = ""
-                        row_result[f"faq_{idx + 1}_answer"] = ""
-                        row_result[f"faq_{idx + 1}_source"] = ""
+                # Combine all FAQs into a single cell: Q then A per pair
+                faq_combined = "\n\n".join(
+                    f"Q: {item['question']}\nA: {item['answer']}"
+                    for item in faq_items
+                    if item.get("question")
+                )
+                faq_sources = ", ".join(
+                    item.get("source", "generated")
+                    for item in faq_items
+                    if item.get("question")
+                )
+                row_result["faq_combined"] = faq_combined
+                row_result["faq_sources"] = faq_sources
 
                 results.append(row_result)
 
@@ -742,15 +744,19 @@ if "results_df" in st.session_state:
 
         with st.expander(f"{row['url']} - {row.get('selected_keyword', '')}"):
             # FAQs
-            for idx in range(1, _num_faqs + 1):
-                q = row.get(f"faq_{idx}_question", "")
-                a = row.get(f"faq_{idx}_answer", "")
-                if q:
-                    src = row.get(f"faq_{idx}_source", "")
+            combined = row.get("faq_combined", "")
+            sources = [s.strip() for s in row.get("faq_sources", "").split(",")]
+            if combined:
+                for idx, pair in enumerate(combined.split("\n\n")):
+                    lines = pair.strip().splitlines()
+                    q = lines[0].replace("Q: ", "").strip() if lines else ""
+                    a = lines[1].replace("A: ", "").strip() if len(lines) > 1 else ""
+                    src = sources[idx] if idx < len(sources) else ""
                     badge = {"ai_overview": "🔵", "paa": "🟢", "generated": "⚪"}.get(src, "")
-                    st.markdown(f"**{badge} Q{idx}: {q}**")
-                    st.write(a)
-                    st.divider()
+                    if q:
+                        st.markdown(f"**{badge} Q{idx + 1}: {q}**")
+                        st.write(a)
+                        st.divider()
 
             # Schema
             if row.get("faq_schema_script"):
@@ -841,10 +847,8 @@ if "results_df" in st.session_state:
                 "faq_schema_json": "FAQ Schema JSON-LD",
                 "status": "FAQ Status",
             }
-            for idx in range(1, _num_faqs + 1):
-                col_map[f"faq_{idx}_question"] = f"FAQ {idx} Question"
-                col_map[f"faq_{idx}_answer"] = f"FAQ {idx} Answer"
-                col_map[f"faq_{idx}_source"] = f"FAQ {idx} Source"
+            col_map["faq_combined"] = "FAQ Content"
+            col_map["faq_sources"] = "FAQ Sources"
 
             with st.spinner("Writing to sheet..."):
                 try:
