@@ -261,6 +261,8 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "language_code": "en",
         "depth": 10,
         "people_also_ask_click_depth": 4,
+        "device": "desktop",
+        "os": "macos",
         "load_async_ai_overview": load_async_ai_overview,
     }]
 
