@@ -218,29 +218,29 @@ def _parse_faq_json(raw: str) -> list:
 
 # ── Provider routing ──────────────────────────────────────────────────────────
 
-def _call_claude(api_key: str, prompt: str) -> str:
+def _call_claude(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2048,
+        max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
     return msg.content[0].text
 
 
-def _call_openai(api_key: str, prompt: str) -> str:
+def _call_openai(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=api_key)
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        max_tokens=2048,
+        max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.choices[0].message.content
 
 
-def _call_gemini(api_key: str, prompt: str) -> str:
+def _call_gemini(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
     from google import genai
     client = genai.Client(api_key=api_key)
     resp = client.models.generate_content(
@@ -250,22 +250,23 @@ def _call_gemini(api_key: str, prompt: str) -> str:
     return resp.text
 
 
-def _call_mistral(api_key: str, prompt: str) -> str:
+def _call_mistral(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
     from mistralai.client import Mistral
     client = Mistral(api_key=api_key)
     resp = client.chat.complete(
         model="mistral-small-latest",
+        max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.choices[0].message.content
 
 
-def _call_groq(api_key: str, prompt: str) -> str:
+def _call_groq(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
     from groq import Groq
     client = Groq(api_key=api_key)
     resp = client.chat.completions.create(
         model="llama3-70b-8192",
-        max_tokens=2048,
+        max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.choices[0].message.content
@@ -477,7 +478,9 @@ def generate_faq_batch(
         raise ValueError(f"Unknown provider: {provider}")
 
     prompt = _build_batch_prompt(pages, num_faqs)
-    raw = fn(api_key, prompt)
+    # Scale tokens: ~400 per FAQ × num_faqs × pages, capped at 8000
+    batch_max_tokens = min(8000, max(2048, len(pages) * num_faqs * 400))
+    raw = fn(api_key, prompt, max_tokens=batch_max_tokens)
     parsed = _parse_batch_json(raw, len(pages))
 
     # Build per-page debug summaries showing exactly what context the AI received
@@ -527,6 +530,24 @@ def generate_faq_batch(
                 "answer": sanitise(item.get("answer", ""), brand_name),
                 "source": item.get("source", "generated"),
             })
+
+        # Fallback: if batch parsing returned nothing for this page, retry solo
+        if not sanitised:
+            try:
+                solo_prompt = _build_batch_prompt([page], num_faqs)
+                solo_raw = fn(api_key, solo_prompt, max_tokens=2048)
+                solo_parsed = _parse_batch_json(solo_raw, 1)
+                for item in (solo_parsed.get("1") or []):
+                    if not isinstance(item, dict):
+                        continue
+                    sanitised.append({
+                        "question": sanitise(item.get("question", ""), brand_name),
+                        "answer": sanitise(item.get("answer", ""), brand_name),
+                        "source": item.get("source", "generated"),
+                    })
+            except Exception:
+                pass
+
         results[i] = sanitised
 
     return results, prompt, page_debug_prompts
