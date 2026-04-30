@@ -266,7 +266,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "load_async_ai_overview": load_async_ai_overview,
     }]
 
-    max_attempts = 7
+    max_attempts = 5
     last_error = None
 
     for attempt in range(1, max_attempts + 1):
