@@ -740,14 +740,15 @@ if "results_df" in st.session_state:
         if row.get("status") != "ok":
             continue
 
-        url_key = str(row.get("url", "")).replace("/", "_").replace(":", "")
+        row_idx = list(results_df.iterrows()).index((_, row)) if False else _
+        url_key = f"{str(row.get('url', '')).replace('/', '_').replace(':', '')}_{row_idx}"
 
         with st.expander(f"{row['url']} - {row.get('selected_keyword', '')}"):
             # FAQs
-            combined = row.get("faq_combined", "")
+            faq_combined = row.get("faq_combined", "")
             sources = [s.strip() for s in row.get("faq_sources", "").split(",")]
-            if combined:
-                for idx, pair in enumerate(combined.split("\n\n")):
+            if faq_combined:
+                for idx, pair in enumerate(faq_combined.split("\n\n")):
                     lines = pair.strip().splitlines()
                     q = lines[0].replace("Q: ", "").strip() if lines else ""
                     a = lines[1].replace("A: ", "").strip() if len(lines) > 1 else ""
@@ -783,7 +784,7 @@ if "results_df" in st.session_state:
             paa = row.get("paa_raw_text", "") or ""
             keyword = row.get("selected_keyword", "") or ""
 
-            combined = "\n".join([
+            debug_text = "\n".join([
                 f"KEYWORD: {keyword}",
                 "",
                 "=" * 60,
@@ -804,7 +805,7 @@ if "results_df" in st.session_state:
 
             st.text_area(
                 "All data sent to AI",
-                value=combined,
+                value=debug_text,
                 height=400,
                 disabled=True,
                 key=f"debug_{url_key}"
