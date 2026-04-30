@@ -355,7 +355,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         # No AI Overview content yet — retry if attempts remain
         if attempt < max_attempts:
             import time as _time
-            _time.sleep(2)
+            _time.sleep(3)
             continue
 
         # Exhausted all attempts — return best result so far
@@ -365,7 +365,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         last_error = str(e)
         if attempt < max_attempts:
             import time as _time
-            _time.sleep(2)
+            _time.sleep(3)
             continue
         result = empty.copy()
         result["error"] = last_error
