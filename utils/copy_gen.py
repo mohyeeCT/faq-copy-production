@@ -189,7 +189,7 @@ For each question:
 - Where possible, avoid repeating question patterns already used on other pages
 - Do not create FAQs that repeat what the page copy already covers too closely
 - Do not create FAQs that feel redundant with existing copy unless the FAQ format adds clear value
-- Only keep FAQ ideas that fit naturally with the page and fill a real gap or improve clarity in this run — but only if a more specific alternative exists for this page
+- Only keep FAQ ideas that fit naturally with the page and fill a real gap or improve clarity
 - Lead the answer with a direct, complete response in the first sentence
 - Keep answers 40 to 80 words, written for featured snippet format
 - No em dashes. No filler openers (never: "Great question", "Certainly", "Of course", "Absolutely")
