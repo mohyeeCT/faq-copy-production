@@ -186,7 +186,10 @@ For each question:
 - Focus on what is UNIQUE and SPECIFIC to this product or page — not questions that would apply equally to any product in the same category (e.g. avoid generic shipping, allergen, or storage questions unless the page has truly distinctive information about them)
 - It must relate directly to the page content, keyword, and what a visitor to this page would actually want to know
 - Reject any signal question that is too generic, off-topic, or does not match the page purpose
-- Where possible, avoid repeating question patterns already used on other pages in this run — but only if a more specific alternative exists for this page
+- Where possible, avoid repeating question patterns already used on other pages
+- Do not create FAQs that repeat what the page copy already covers too closely
+- Do not create FAQs that feel redundant with existing copy unless the FAQ format adds clear value
+- Only keep FAQ ideas that fit naturally with the page and fill a real gap or improve clarity in this run — but only if a more specific alternative exists for this page
 - Lead the answer with a direct, complete response in the first sentence
 - Keep answers 40 to 80 words, written for featured snippet format
 - No em dashes. No filler openers (never: "Great question", "Certainly", "Of course", "Absolutely")
@@ -431,6 +434,9 @@ Rules for all pages:
 - Only use AIO/PAA questions if genuinely relevant to that specific page
 - No em dashes. No filler openers ("Great question", "Certainly", "Of course", "Absolutely")
 - Where possible, avoid repeating question patterns already used on other pages
+- Do not create FAQs that repeat what the page copy already covers too closely
+- Do not create FAQs that feel redundant with existing copy unless the FAQ format adds clear value
+- Only keep FAQ ideas that fit naturally with the page and fill a real gap or improve clarity
 
 {pages_text}
 
