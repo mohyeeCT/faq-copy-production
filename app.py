@@ -140,8 +140,8 @@ with st.sidebar:
 
     batch_size = st.slider(
         "Batch size (pages per AI call)",
-        min_value=1, max_value=15, value=5,
-        help="Group this many pages into one AI call. Higher = better cross-page differentiation. Lower = closer to per-page behaviour. Set to 1 to disable batching."
+        min_value=1, max_value=50, value=5,
+        help="Group this many pages into one AI call. Higher = better cross-page differentiation. Batches above 15 recommended for Claude and OpenAI only — Gemini, Mistral and Groq may hit context or rate limits."
     )
 
     load_async_ai_overview = st.toggle(
