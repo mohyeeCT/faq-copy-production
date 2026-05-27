@@ -23,34 +23,10 @@ def _relevance_score(query: str, h1: str) -> float:
 
 
 def _position_score(position: float) -> float:
-    """Positions 1-20 score 1.0. Beyond 20 drops off."""
-    if position <= 20:
-        return 1.0
-    return max(0.1, 1.0 - (position - 20) * 0.05)
-
-
-def score_query(query_data: dict, dfs_data: dict, h1: str = "") -> float:
+    """Positions 1-20 score 1.0. Beyond 20 drops off.
+    Formula: 1 / (1 + max(0, position - 20) * 0.1)
     """
-    score = (volume / difficulty) * log1p(impressions) * (1 + CTR) * position_score * relevance_score
-    Returns 0.0 if volume is zero.
-    """
-    query = query_data["query"].lower()
-    impressions = query_data.get("impressions", 0)
-    ctr = query_data.get("ctr", 0.0)
-    position = query_data.get("position", 99.0)
-
-    dfs = dfs_data.get(query, {})
-    volume = dfs.get("volume", 0) or 0
-    difficulty = dfs.get("difficulty", 50) or 50
-
-    if volume == 0:
-        return 0.0
-
-    pos_score = _position_score(position)
-    rel_score = _relevance_score(query, h1)
-
-    score = (volume / difficulty) * math.log1p(impressions) * (1 + ctr) * pos_score * rel_score
-    return round(score, 4)
+    return 1 / (1 + max(0, position - 20) * 0.1)
 
 
 def select_keyword(
@@ -58,12 +34,19 @@ def select_keyword(
     dfs_data: dict,
     branded_terms: list,
     min_volume: int = 10,
-    h1: str = ""
+    h1: str = "",
+    restricted_industry: bool = False,
 ) -> dict:
     """Score and rank GSC queries. Return selected keyword and runner-up.
 
-    position_cutoff: only exclude exact position 1.0 (not position 1.x or 2+).
-    branded filtering: substring match (not exact).
+    Changes from original:
+    - CTR capped at 0.15 to prevent outlier CTR from dominating scores
+    - restricted_industry mode: ignores volume/difficulty, scores on GSC signals only.
+      Used for industries where DFS suppresses volume data (CBD, guns, dispensaries, adult).
+    - Zero-volume keywords: scored with 0.1 proxy penalty in standard mode (not dropped).
+      In restricted_industry mode they compete on equal footing.
+    - position_cutoff: only excludes exact position 1.0
+    - branded filtering: substring match
     """
 
     def is_branded(query: str) -> bool:
@@ -71,9 +54,13 @@ def select_keyword(
         return any(b.lower() in q_lower for b in branded_terms if b)
 
     candidates = []
+
     for q in gsc_queries:
         query = q["query"]
         position = q.get("position", 99.0)
+        impressions = q.get("impressions", 0)
+        clicks = q.get("clicks", 0)
+        ctr = min(q.get("ctr", 0.0), 0.15)  # cap CTR at 15%
 
         if is_branded(query):
             continue
@@ -82,15 +69,44 @@ def select_keyword(
 
         dfs = dfs_data.get(query.lower(), {})
         volume = dfs.get("volume", 0) or 0
-        if volume < min_volume:
+        difficulty = dfs.get("difficulty", 50) or 50
+
+        pos_score = _position_score(position)
+        rel_score = _relevance_score(query, h1)
+        ctr_boost = 1 + ctr
+
+        if volume == 0:
+            if impressions > 0:
+                if restricted_industry:
+                    # Restricted: score on engagement alone, no penalty
+                    clicks_boost = max(math.log1p(clicks), 1.0)
+                    sc = math.log1p(impressions) * clicks_boost * ctr_boost * pos_score * rel_score
+                else:
+                    # Standard: apply 0.1 penalty so these rank below volume-bearing keywords
+                    sc = math.log1p(impressions) * ctr_boost * 0.1
+                candidates.append({
+                    "keyword": query,
+                    "score": round(sc, 4),
+                    "volume": 0,
+                    "difficulty": difficulty,
+                })
             continue
 
-        sc = score_query(q, dfs_data, h1)
+        if not restricted_industry and volume < min_volume:
+            continue
+
+        if restricted_industry:
+            # Ignore volume/difficulty entirely - level playing field
+            clicks_boost = max(math.log1p(clicks), 1.0)
+            sc = math.log1p(impressions) * clicks_boost * ctr_boost * pos_score * rel_score
+        else:
+            sc = (volume / difficulty) * math.log1p(impressions) * ctr_boost * pos_score * rel_score
+
         candidates.append({
             "keyword": query,
-            "score": sc,
+            "score": round(sc, 4),
             "volume": volume,
-            "difficulty": dfs.get("difficulty", 50)
+            "difficulty": difficulty,
         })
 
     if not candidates:
@@ -98,7 +114,7 @@ def select_keyword(
             "selected_keyword": None,
             "selected_keyword_data": None,
             "runner_up": None,
-            "fallback_triggered": True
+            "fallback_triggered": True,
         }
 
     candidates.sort(key=lambda x: x["score"], reverse=True)
@@ -107,5 +123,5 @@ def select_keyword(
         "selected_keyword": candidates[0]["keyword"],
         "selected_keyword_data": candidates[0],
         "runner_up": candidates[1] if len(candidates) > 1 else None,
-        "fallback_triggered": False
+        "fallback_triggered": False,
     }

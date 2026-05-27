@@ -172,6 +172,13 @@ with st.sidebar:
         help="Lower for niche B2B sites. Set to 0 to disable."
     )
 
+    restricted_industry = st.toggle(
+        "Restricted industry mode",
+        value=False,
+        help="For industries where DFS/GKP suppress volume data (CBD, guns, dispensaries, adult). "
+             "When on, ignores volume and difficulty entirely and scores keywords on GSC engagement signals only."
+    )
+
 # ── Section 1: Connect to Google Sheet ───────────────────────────────────────
 
 st.header("1. Connect to Google Sheet")
@@ -470,7 +477,8 @@ if "df" in st.session_state:
                         dfs_data=dfs_merged,
                         branded_terms=branded_terms,
                         min_volume=int(min_volume),
-                        h1=h1_value
+                        h1=h1_value,
+                        restricted_industry=restricted_industry,
                     )
 
                     if not result["fallback_triggered"]:
