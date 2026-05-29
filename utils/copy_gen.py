@@ -103,11 +103,13 @@ def _build_prompt(
     forbidden_phrases: str,
     page_context: str,
     used_question_patterns: list = None,
+    brand_guidelines: str = "",
 ) -> str:
     biz_ctx = _BIZ_CONTEXT.get(business_type, _BIZ_CONTEXT["general"])
     brand_line = f"Brand name: '{brand_name}'. Use exact casing throughout." if brand_name else "No brand name required."
     h1_line = f"Page H1 (context only, do not copy verbatim): {h1}" if h1 else ""
     forbidden_line = f"Never use these phrases: {forbidden_phrases}" if forbidden_phrases.strip() else ""
+    brand_guidelines_block = f"BRAND & COPY GUIDELINES:\n{brand_guidelines.strip()}" if brand_guidelines.strip() else ""
 
     if page_context:
         context_block = (
@@ -172,6 +174,7 @@ Business type context: {biz_ctx}
 {h1_line}
 {brand_line}
 {forbidden_line}
+{brand_guidelines_block}
 
 {context_block}
 
@@ -301,6 +304,7 @@ def generate_faq(
     forbidden_phrases: str = "",
     page_context: str = "",
     used_question_patterns: list = None,
+    brand_guidelines: str = "",
 ) -> list:
     """Generate FAQ Q&A pairs using the selected AI provider.
 
@@ -325,6 +329,7 @@ def generate_faq(
         forbidden_phrases=forbidden_phrases,
         page_context=page_context,
         used_question_patterns=used_question_patterns,
+        brand_guidelines=brand_guidelines,
     )
 
     raw = fn(api_key, prompt)
@@ -405,6 +410,7 @@ Business type: {biz_ctx}
 {h1_line}
 {brand_line}
 {forbidden_line}
+{brand_guidelines_block}
 
 {ctx}
 

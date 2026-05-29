@@ -132,6 +132,15 @@ with st.sidebar:
         help="If the brand is an abbreviation (e.g. DSB), enter the full name. Each word is added to the branded filter."
     )
 
+    st.markdown("---")
+    brand_guidelines = st.text_area(
+        "Brand & Copy Guidelines (optional)",
+        placeholder="Paste brand voice, tone, target audience, USPs, key messages, words to avoid, competitor notes, or any copy guidelines here. The AI will apply this context to every FAQ generated in this run.",
+        height=160,
+        help="Free-form brand context injected into every prompt. Paste a brand brief, style notes, or bullet points — any format works."
+    )
+    st.markdown("---")
+
     num_faqs = st.slider(
         "Number of FAQs per page",
         min_value=3, max_value=10, value=5,
@@ -567,6 +576,7 @@ if "df" in st.session_state:
                     p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
                 ),
                 "used_question_patterns": list(used_question_patterns),
+                "brand_guidelines": brand_guidelines,
             })
 
         # ── Pass 2: Batch AI generation ──────────────────────────────────────
