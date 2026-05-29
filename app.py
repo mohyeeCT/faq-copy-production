@@ -573,7 +573,10 @@ if "df" in st.session_state:
         )
 
         # Group pending pages into batches of batch_size
-        batches = [pending_pages[k:k + batch_size] for k in range(0, len(pending_pages), batch_size)]
+        # Hard cap at 20 pages per AI call — larger batches cause timeouts and silent failures
+        MAX_SAFE_BATCH = 20
+        effective_batch_size = min(batch_size, MAX_SAFE_BATCH)
+        batches = [pending_pages[k:k + effective_batch_size] for k in range(0, len(pending_pages), effective_batch_size)]
         total_batches = len(batches)
 
         for b_idx, batch in enumerate(batches):

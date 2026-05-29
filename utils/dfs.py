@@ -266,7 +266,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "load_async_ai_overview": load_async_ai_overview,
     }]
 
-    max_attempts = 5
+    max_attempts = 3
     last_error = None
 
     for attempt in range(1, max_attempts + 1):
@@ -355,7 +355,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         # No AI Overview content yet — retry if attempts remain
         if attempt < max_attempts:
             import time as _time
-            _time.sleep(3)
+            _time.sleep(1.5)
             continue
 
         # Exhausted all attempts — return best result so far
@@ -365,7 +365,7 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         last_error = str(e)
         if attempt < max_attempts:
             import time as _time
-            _time.sleep(3)
+            _time.sleep(1.5)
             continue
         result = empty.copy()
         result["error"] = last_error
