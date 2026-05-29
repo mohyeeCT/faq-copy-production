@@ -7,7 +7,7 @@ from io import StringIO
 
 from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
-from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_data
+from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_data, get_serp_data_with_interrogative_fallback
 from utils.keyword import select_keyword
 from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question
 from utils.scraper import scrape_page_context
@@ -512,9 +512,9 @@ if "df" in st.session_state:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: skipped ({keyword_source})")
                 continue
 
-            # Step 3: Fetch AI Overview + PAA in one SERP call
+            # Step 3: Fetch AI Overview + PAA. If both empty, try interrogative prefixes (what/how/why)
             progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: fetching AI Overview + PAA...")
-            serp_data = get_serp_data(
+            serp_data = get_serp_data_with_interrogative_fallback(
                 dfs_login, dfs_password, selected_keyword,
                 location_code=int(location_code),
                 load_async_ai_overview=load_async_ai_overview
@@ -529,6 +529,7 @@ if "df" in st.session_state:
             ao_raw_debug = serp_data.get("ao_raw_debug", "")
             ao_raw_found = serp_data.get("ao_raw_found", False)
             ao_attempts = serp_data.get("ao_attempts", 1)
+            interrogative_fallback = serp_data.get("fallback_query", "")
 
             # Step 4: Stage page data for batch generation
             pending_pages.append({
@@ -547,6 +548,7 @@ if "df" in st.session_state:
                 "ao_raw_debug": ao_raw_debug,
                 "ao_raw_found": ao_raw_found,
                 "ao_attempts": ao_attempts,
+                "interrogative_fallback": interrogative_fallback,
                 "ai_overview_raw_text": serp_data.get("ai_overview_raw", ""),
                 "paa_raw_text": "\n".join(f"Q: {p['question']}\nA: {p['answer']}" for p in paa_items) if paa_items else "",
                 "paa_raw_debug": serp_data.get("paa_raw_debug", ""),

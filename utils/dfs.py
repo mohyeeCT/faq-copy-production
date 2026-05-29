@@ -266,6 +266,8 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         "load_async_ai_overview": load_async_ai_overview,
     }]
 
+    # 3 attempts max — gives the async AI Overview a fair chance to load
+    # without the original 5-attempt × 3s = 15s wasted sleep per URL
     max_attempts = 3
     last_error = None
 
@@ -371,3 +373,46 @@ def get_serp_data(login: str, password: str, keyword: str, location_code: int = 
         result["error"] = last_error
         result["ao_attempts"] = attempt
         return result
+
+
+def get_serp_data_with_interrogative_fallback(
+    login: str, password: str, keyword: str,
+    location_code: int = 2840,
+    load_async_ai_overview: bool = True,
+) -> dict:
+    """
+    Calls get_serp_data for the keyword. If both AIO and PAA come back empty,
+    tries interrogative prefixes (what, how, why) in order until one returns
+    PAA or AIO data. Returns the best result found.
+
+    The fallback_query field in the result indicates which query triggered data,
+    or is empty if the original keyword returned results.
+    """
+    result = get_serp_data(login, password, keyword, location_code, load_async_ai_overview)
+    result["fallback_query"] = ""
+
+    ao_empty = not result.get("ai_overview_sections") and not result.get("ai_overview_raw", "").strip()
+    paa_empty = not result.get("paa_items")
+
+    if not (ao_empty and paa_empty):
+        # Original keyword had data — no fallback needed
+        return result
+
+    # Both empty — try interrogative prefixes in priority order
+    prefixes = ["what", "how", "why"]
+    for prefix in prefixes:
+        fallback_kw = f"{prefix} {keyword}"
+        try:
+            fb = get_serp_data(login, password, fallback_kw, location_code, load_async_ai_overview)
+            fb_ao_empty = not fb.get("ai_overview_sections") and not fb.get("ai_overview_raw", "").strip()
+            fb_paa_empty = not fb.get("paa_items")
+
+            if not fb_ao_empty or not fb_paa_empty:
+                # This prefix triggered data — use it, tag the fallback query
+                fb["fallback_query"] = fallback_kw
+                return fb
+        except Exception:
+            continue
+
+    # No interrogative prefix returned data — return original empty result
+    return result
