@@ -58,6 +58,10 @@ Once the target keyword is selected:
 3. Pass questions to AI as seed questions for the FAQ
 4. If no PAA data returns, AI generates questions from keyword + page context
 
+## Ecommerce Collection Context
+
+For ecommerce category or collection pages, scraped product names, prices, and filters are used only as research context. FAQ prompts instruct the AI to generalize those signals and avoid exact prices, product counts, sizes, variant counts, inventory details, or exact product-name references unless the page is clearly about one specific product.
+
 ---
 
 ## Output Columns Written to Sheet

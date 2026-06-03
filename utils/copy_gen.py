@@ -71,6 +71,33 @@ _BIZ_CONTEXT = {
 }
 
 
+_ECOMMERCE_COLLECTION_GUARDRAIL = (
+    "ECOMMERCE COLLECTION CONTEXT RULES:\n"
+    "- Use ecommerce collection context as research only to understand the page theme, shopper intent, "
+    "product range, comparison factors, and common attributes.\n"
+    "- Do not mention exact prices, sale prices, price ranges, or currency amounts from scraped products.\n"
+    "- Do not mention exact product counts or imply a fixed number of products in the collection.\n"
+    "- Do not mention exact sizes, filter values, inventory levels, SKU details, or availability claims.\n"
+    "- Do not mention exact variant counts or imply a fixed number of variants.\n"
+    "- Do not quote exact product names from the scraped collection unless the target keyword or page H1 "
+    "is clearly about that single product.\n"
+    "- Generalize collection details into stable buyer-focused ideas, such as multiple styles, different "
+    "price points, available size options, material choices, use cases, or ways to compare products."
+)
+
+
+def _is_ecommerce_collection_context(business_type: str, page_type: str, page_context: str = "") -> bool:
+    business_type_norm = (business_type or "").strip().lower()
+    page_type_norm = (page_type or "").strip().lower()
+    if business_type_norm != "ecommerce":
+        return False
+    return (
+        "category" in page_type_norm
+        or "collection" in page_type_norm
+        or "COLLECTION CONTEXT" in (page_context or "")
+    )
+
+
 def _fingerprint_question(question: str, keyword: str = "") -> str:
     """Strip keyword/brand and normalise a question to a pattern string.
     Used to detect structurally similar questions across different pages.
@@ -110,6 +137,11 @@ def _build_prompt(
     h1_line = f"Page H1 (context only, do not copy verbatim): {h1}" if h1 else ""
     forbidden_line = f"Never use these phrases: {forbidden_phrases}" if forbidden_phrases.strip() else ""
     brand_guidelines_block = f"BRAND & COPY GUIDELINES:\n{brand_guidelines.strip()}" if brand_guidelines.strip() else ""
+    collection_guardrail = (
+        _ECOMMERCE_COLLECTION_GUARDRAIL
+        if _is_ecommerce_collection_context(business_type, page_type, page_context)
+        else ""
+    )
 
     if page_context:
         context_block = (
@@ -175,6 +207,7 @@ Business type context: {biz_ctx}
 {brand_line}
 {forbidden_line}
 {brand_guidelines_block}
+{collection_guardrail}
 
 {context_block}
 
@@ -378,6 +411,15 @@ def _build_batch_prompt(pages: list, num_faqs: int) -> str:
         forbidden_line = f"Never use: {forbidden}" if forbidden.strip() else ""
         brand_guidelines = p.get("brand_guidelines", "")
         brand_guidelines_block = f"BRAND & COPY GUIDELINES:\n{brand_guidelines.strip()}" if brand_guidelines.strip() else ""
+        collection_guardrail = (
+            _ECOMMERCE_COLLECTION_GUARDRAIL
+            if _is_ecommerce_collection_context(
+                p.get("business_type", ""),
+                p.get("page_type", ""),
+                page_context,
+            )
+            else ""
+        )
 
         ctx = f"Page content:\n---\n{page_context}\n---" if page_context else ""
 
@@ -415,6 +457,7 @@ Business type: {biz_ctx}
 {brand_line}
 {forbidden_line}
 {brand_guidelines_block}
+{collection_guardrail}
 
 {ctx}
 
