@@ -11,7 +11,7 @@ from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_dat
 from utils.keyword import select_keyword
 from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question
 from utils.niches import get_niche_context, NICHES
-from utils.scraper import scrape_page_context
+from utils.scraper import is_ecommerce_collection_page, scrape_page_context
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -459,11 +459,17 @@ if "df" in st.session_state:
             page_context = ""
             scrape_status = "skipped"
             if enable_scraping:
+                scrape_mode = (
+                    "ecommerce_collection"
+                    if is_ecommerce_collection_page(business_type, page_type)
+                    else "default"
+                )
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: scraping page...")
-                scrape_result = scrape_page_context(jina_key, url, max_chars=10000)
+                scrape_result = scrape_page_context(jina_key, url, max_chars=10000, mode=scrape_mode)
                 if scrape_result["success"]:
                     page_context = scrape_result["content"]
-                    scrape_status = f"ok ({len(page_context)} chars)"
+                    scrape_label = "ecommerce collection" if scrape_mode == "ecommerce_collection" else "default"
+                    scrape_status = f"ok {scrape_label} ({len(page_context)} chars)"
                 else:
                     scrape_status = f"failed: {scrape_result['error'][:80]}"
                     # Non-fatal: continue with keyword + PAA only

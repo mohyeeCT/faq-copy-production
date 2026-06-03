@@ -19,6 +19,18 @@ _REMOVE_SELECTOR = ", ".join([
     "form", "script", "style", "noscript", "iframe",
 ])
 
+_COLLECTION_REMOVE_SELECTOR = ", ".join([
+    "nav", "header", "footer",
+    "#cart", ".cart", "[class*='cart']",
+    "#header", "#footer", "#nav",
+    "[class*='navigation']", "[class*='breadcrumb']", "[class*='cookie']",
+    "[class*='popup']", "[class*='modal']",
+    "[class*='newsletter']", "[class*='subscribe']",
+    "[class*='related']", "[class*='recommended']",
+    "[class*='upsell']", "[class*='cross-sell']",
+    "script", "style", "noscript", "iframe",
+])
+
 # Lines that are almost certainly noise regardless of platform
 _NOISE_LINE_PATTERNS = re.compile(
     r"^\s*("
@@ -35,6 +47,37 @@ _NOISE_LINE_PATTERNS = re.compile(
     r")\s*$",
     re.IGNORECASE
 )
+
+_COLLECTION_NOISE_LINE_PATTERNS = re.compile(
+    r"^\s*("
+    r"Add to cart|Sold out|Sale price|Regular price|Unit price|"
+    r"Quantity must be|Adding product|"
+    r"Please allow \d|"
+    r"Pickup available|Usually ready|"
+    r"Check availability|Service Center|"
+    r"Skip to content|Log in|Sign in|"
+    r"Search$|Menu$|Close$|Footer$|"
+    r"\+?1?[\s\-.]?\(?\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4}"
+    r")\s*$",
+    re.IGNORECASE
+)
+
+_PRICE_RE = re.compile(r"(?:[$£€]\s?\d[\d,.]*(?:\.\d{2})?|\d[\d,.]*(?:\.\d{2})?\s?(?:USD|GBP|EUR))")
+_PRODUCT_LINK_RE = re.compile(r"^\s*#{0,4}\s*(?:[-*]\s*)?\[(?P<name>[^\]]{3,})\]\(https?://[^\)]+\)\s*$")
+_FILTER_LABELS = {
+    "brand", "brands", "size", "sizes", "color", "colour", "colors", "colours",
+    "price", "material", "materials", "style", "styles", "type", "types",
+    "category", "categories", "availability", "product type", "fit", "capacity",
+    "flavor", "flavour", "weight", "finish", "features",
+}
+
+
+def is_ecommerce_collection_page(business_type: str, page_type: str) -> bool:
+    """Return True when the row should use collection/product-grid scraping."""
+    if (business_type or "").strip().lower() != "ecommerce":
+        return False
+    page_type_norm = (page_type or "").strip().lower()
+    return "category" in page_type_norm or "collection" in page_type_norm
 
 
 def _score_paragraph(para: str) -> float:
@@ -61,7 +104,125 @@ def _score_paragraph(para: str) -> float:
     return len(words) * alpha_ratio
 
 
-def scrape_page_context(api_key: str, url: str, max_chars: int = 4000) -> dict:
+def _extract_title(text: str) -> str:
+    title_match = re.search(r"^Title:\s*(.+)$", text, re.MULTILINE)
+    return title_match.group(1).strip() if title_match else ""
+
+
+def _normalise_lines(text: str, noise_pattern: re.Pattern) -> list:
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+    lines = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or noise_pattern.match(line):
+            continue
+        lines.append(line)
+    return lines
+
+
+def _extract_collection_products(lines: list, limit: int = 30) -> list:
+    products = []
+    for idx, line in enumerate(lines):
+        match = _PRODUCT_LINK_RE.match(line)
+        if not match:
+            continue
+        name = re.sub(r"\s+", " ", match.group("name")).strip()
+        price = ""
+        for follow in lines[idx + 1: idx + 5]:
+            price_match = _PRICE_RE.search(follow)
+            if price_match:
+                price = price_match.group(0).strip()
+                break
+            if _PRODUCT_LINK_RE.match(follow):
+                break
+        if name and not any(p["name"].lower() == name.lower() for p in products):
+            products.append({"name": name, "price": price})
+        if len(products) >= limit:
+            break
+    return products
+
+
+def _extract_collection_filters(lines: list) -> dict:
+    filters = {}
+    current = None
+    seen_filter_anchor = False
+
+    for line in lines:
+        clean = re.sub(r"^#+\s*", "", line).strip()
+        clean = re.sub(r"^\*\s*", "", clean).strip()
+        clean_l = clean.lower().rstrip(":")
+
+        if clean_l == "filters":
+            seen_filter_anchor = True
+            current = None
+            continue
+        if _PRODUCT_LINK_RE.match(line):
+            current = None
+            continue
+        if clean_l in _FILTER_LABELS:
+            seen_filter_anchor = True
+            current = clean.rstrip(":")
+            filters.setdefault(current, [])
+            continue
+        if not seen_filter_anchor or not current:
+            continue
+        if _PRICE_RE.search(clean) and current.lower() != "price":
+            continue
+        if len(clean) > 40:
+            current = None
+            continue
+        if clean and clean not in filters[current]:
+            filters[current].append(clean)
+
+    return {k: v[:12] for k, v in filters.items() if v}
+
+
+def _build_collection_context(text: str, max_chars: int) -> tuple:
+    title = _extract_title(text)
+    lines = _normalise_lines(text, _COLLECTION_NOISE_LINE_PATTERNS)
+    products = _extract_collection_products(lines)
+    filters = _extract_collection_filters(lines)
+
+    excerpt_text = "\n".join(lines)
+    excerpt_text = re.sub(r"^\s*\*\s+\[.+?\]\(https?://.+?\)\s*$", "", excerpt_text, flags=re.MULTILINE)
+    excerpt_text = re.sub(r"^#{1,4}\s+\[.+?\]\(https?://.+?\)\s*$", "", excerpt_text, flags=re.MULTILINE)
+    excerpt_text = re.sub(r"\n{3,}", "\n\n", excerpt_text).strip()
+
+    paragraphs = re.split(r"\n{2,}", excerpt_text)
+    excerpt_parts = []
+    chars_used = 0
+    for para in paragraphs:
+        if chars_used >= max_chars // 2:
+            break
+        if _score_paragraph(para) > 0 or para.strip().startswith("#"):
+            excerpt_parts.append(para)
+            chars_used += len(para)
+
+    sections = ["COLLECTION CONTEXT"]
+    if products:
+        sections.append(
+            "Products found:\n" + "\n".join(
+                f"- {p['name']} | {p['price']}" if p["price"] else f"- {p['name']}"
+                for p in products
+            )
+        )
+    if filters:
+        sections.append(
+            "Filters found:\n" + "\n".join(
+                f"- {name}: {', '.join(values)}"
+                for name, values in filters.items()
+            )
+        )
+    if excerpt_parts:
+        sections.append("Page excerpt:\n" + "\n\n".join(excerpt_parts))
+
+    content = "\n\n".join(sections).strip()
+    if len(content) > max_chars:
+        content = content[:max_chars].strip()
+    return content, title
+
+
+def scrape_page_context(api_key: str, url: str, max_chars: int = 4000, mode: str = "default") -> dict:
     """Scrape a page via Jina Reader and return cleaned topic context.
 
     Strategy:
@@ -76,12 +237,13 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 4000) -> dict:
     if not url:
         return {"content": "", "title": "", "success": False, "error": "No URL provided"}
 
+    remove_selector = _COLLECTION_REMOVE_SELECTOR if mode == "ecommerce_collection" else _REMOVE_SELECTOR
     headers = {
         "Accept": "text/plain",
         "X-Return-Format": "markdown",
         "X-With-Links-Summary": "false",
         "X-With-Images-Summary": "false",
-        "X-Remove-Selector": _REMOVE_SELECTOR,
+        "X-Remove-Selector": remove_selector,
         "X-Timeout": "30",
     }
     if api_key:
@@ -102,11 +264,15 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 4000) -> dict:
             return {"content": "", "title": "", "success": False,
                     "error": "Jina returned empty content"}
 
+        if mode == "ecommerce_collection":
+            content, title = _build_collection_context(text, max_chars)
+            if not content or content == "COLLECTION CONTEXT":
+                return {"content": "", "title": title, "success": False,
+                        "error": "No collection products, filters, or content found"}
+            return {"content": content, "title": title, "success": True, "error": ""}
+
         # Extract title from Jina metadata block
-        title = ""
-        title_match = re.search(r"^Title:\s*(.+)$", text, re.MULTILINE)
-        if title_match:
-            title = title_match.group(1).strip()
+        title = _extract_title(text)
 
         # Drop image lines, pure link-list lines, and heading-wrapped links
         text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
