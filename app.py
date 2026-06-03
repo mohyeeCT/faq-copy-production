@@ -10,6 +10,7 @@ from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_data, get_serp_data_with_interrogative_fallback
 from utils.keyword import select_keyword
 from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question
+from utils.niches import get_niche_context, NICHES
 from utils.scraper import scrape_page_context
 
 
@@ -125,12 +126,35 @@ with st.sidebar:
     )
 
     brand_name = st.text_input("Brand Name", placeholder="Acme Inc.")
+    include_brand = st.checkbox("Include brand name in copy", value=True)
 
     full_brand_name = st.text_input(
         "Full Brand Name (optional)",
         placeholder="Dayson Shalabi Burkert",
         help="If the brand is an abbreviation (e.g. DSB), enter the full name. Each word is added to the branded filter."
     )
+
+    st.markdown("---")
+    # Niche selection
+    _niche_groups = {}
+    for _nk, _nv in NICHES.items():
+        _niche_groups.setdefault(_nv["group"], []).append((_nk, _nv["label"]))
+    _niche_options = [("none", "No specific niche")]
+    for _grp in ["B2B", "Service / Local", "Ecommerce"]:
+        for _nk, _nlabel in _niche_groups.get(_grp, []):
+            _niche_options.append((_nk, f"{_grp}: {_nlabel}"))
+    _niche_keys = [k for k, _ in _niche_options]
+    _niche_labels = [l for _, l in _niche_options]
+    _niche_idx = st.session_state.get("niche_idx", 0)
+    selected_niche_idx = st.selectbox(
+        "Niche",
+        range(len(_niche_options)),
+        format_func=lambda i: _niche_labels[i],
+        index=_niche_idx,
+        key="niche_select"
+    )
+    selected_niche = _niche_keys[selected_niche_idx]
+    st.session_state["niche_idx"] = selected_niche_idx
 
     st.markdown("---")
     brand_guidelines = st.text_area(
@@ -578,6 +602,13 @@ if "df" in st.session_state:
                 "used_question_patterns": list(used_question_patterns),
                 "brand_guidelines": brand_guidelines,
             })
+            # Inject niche context into brand_guidelines for this page
+            _niche_ctx = get_niche_context(selected_niche)
+            if _niche_ctx:
+                _bg = pending_pages[-1].get("brand_guidelines", "")
+                pending_pages[-1]["brand_guidelines"] = (
+                    _bg + "\n\n" + _niche_ctx if _bg.strip() else _niche_ctx
+                )
 
         # ── Pass 2: Batch AI generation ──────────────────────────────────────
         _forbidden_str = "\n".join(
@@ -611,6 +642,7 @@ if "df" in st.session_state:
                     api_key=ai_key,
                     pages=batch,
                     num_faqs=num_faqs,
+                    include_brand=include_brand,
                 )
                 # Update with actual prompt sent
                 st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
