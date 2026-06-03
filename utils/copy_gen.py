@@ -305,6 +305,7 @@ def generate_faq(
     page_context: str = "",
     used_question_patterns: list = None,
     brand_guidelines: str = "",
+    include_brand: bool = True,
 ) -> list:
     """Generate FAQ Q&A pairs using the selected AI provider.
 
@@ -316,10 +317,11 @@ def generate_faq(
     if not fn:
         raise ValueError(f"Unknown provider: {provider}")
 
+    effective_brand = brand_name if include_brand else ""
     prompt = _build_prompt(
         keyword=keyword,
         page_type=page_type,
-        brand_name=brand_name,
+        brand_name=effective_brand,
         business_type=business_type,
         h1=h1,
         ai_overview_sections=ai_overview_sections,
@@ -340,8 +342,8 @@ def generate_faq(
         if not isinstance(item, dict):
             continue
         sanitised.append({
-            "question": sanitise(item.get("question", ""), brand_name),
-            "answer": sanitise(item.get("answer", ""), brand_name),
+            "question": sanitise(item.get("question", ""), effective_brand),
+            "answer": sanitise(item.get("answer", ""), effective_brand),
             "source": item.get("source", "generated"),
         })
 
@@ -374,6 +376,8 @@ def _build_batch_prompt(pages: list, num_faqs: int) -> str:
         brand_line = f"Brand name: '{brand_name}'. Use exact casing." if brand_name else ""
         h1_line = f"H1: {h1}" if h1 else ""
         forbidden_line = f"Never use: {forbidden}" if forbidden.strip() else ""
+        brand_guidelines = p.get("brand_guidelines", "")
+        brand_guidelines_block = f"BRAND & COPY GUIDELINES:\n{brand_guidelines.strip()}" if brand_guidelines.strip() else ""
 
         ctx = f"Page content:\n---\n{page_context}\n---" if page_context else ""
 
@@ -477,6 +481,7 @@ def generate_faq_batch(
     api_key: str,
     pages: list,
     num_faqs: int,
+    include_brand: bool = True,
 ) -> tuple:
     """Generate FAQs for multiple pages in a single AI call.
 
@@ -491,7 +496,7 @@ def generate_faq_batch(
 
     prompt = _build_batch_prompt(pages, num_faqs)
     # Scale tokens: ~400 per FAQ × num_faqs × pages, capped at 8000
-    batch_max_tokens = min(64000, max(2048, len(pages) * num_faqs * 400))
+    batch_max_tokens = min(8192, max(2048, len(pages) * num_faqs * 400))
     raw = fn(api_key, prompt, max_tokens=batch_max_tokens)
     parsed = _parse_batch_json(raw, len(pages))
 
@@ -531,7 +536,7 @@ def generate_faq_batch(
 
     results = {}
     for i, page in enumerate(pages):
-        brand_name = page.get("brand_name", "")
+        brand_name = page.get("brand_name", "") if include_brand else ""
         raw_items = parsed.get(str(i + 1), [])
         sanitised = []
         for item in raw_items:
