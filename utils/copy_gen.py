@@ -496,7 +496,7 @@ def generate_faq_batch(
 
     prompt = _build_batch_prompt(pages, num_faqs)
     # Scale tokens: ~400 per FAQ × num_faqs × pages, capped at 8000
-    batch_max_tokens = min(8192, max(2048, len(pages) * num_faqs * 400))
+    batch_max_tokens = min(64000, max(2048, len(pages) * num_faqs * 400))
     raw = fn(api_key, prompt, max_tokens=batch_max_tokens)
     parsed = _parse_batch_json(raw, len(pages))
 
