@@ -4,7 +4,7 @@ import json
 import re
 import time
 import inspect
-from io import StringIO
+from io import StringIO, BytesIO
 
 from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
@@ -203,8 +203,8 @@ with st.sidebar:
 
     batch_size = st.slider(
         "Batch size (pages per AI call)",
-        min_value=1, max_value=50, value=5,
-        help="Group this many pages into one AI call. Higher = better cross-page differentiation. Batches above 15 recommended for Claude and OpenAI only — Gemini, Mistral and Groq may hit context or rate limits."
+        min_value=1, max_value=5, value=5,
+        help="Group this many pages into one AI call. Keep this at 5 or lower to reduce timeout and context-limit risk."
     )
 
     processing_chunk_size = st.slider(
@@ -1108,6 +1108,15 @@ if "results_df" in st.session_state:
             data=csv_buffer.getvalue(),
             file_name="faq_copy_output.csv",
             mime="text/csv"
+        )
+
+        excel_buffer = BytesIO()
+        results_df.to_excel(excel_buffer, index=False, engine="openpyxl")
+        st.download_button(
+            label="Download Excel",
+            data=excel_buffer.getvalue(),
+            file_name="faq_copy_output.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     with ec2:
