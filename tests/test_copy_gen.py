@@ -25,13 +25,14 @@ class CopyPromptTests(unittest.TestCase):
         )
 
         self.assertIn("UNSUPPORTED CLAIM RULES", prompt)
-        self.assertIn("Do not state return", prompt)
+        self.assertIn("Do not generate FAQ questions or answers about return", prompt)
         self.assertIn("shipping", prompt)
         self.assertIn("warranty", prompt)
         self.assertIn("availability", prompt)
-        self.assertIn("unless explicitly present", prompt)
+        self.assertIn("Exclude these topics entirely", prompt)
         self.assertIn("Treat AI Overview and PAA as research signals, not proof", prompt)
-        self.assertIn("flag it for review", prompt)
+        self.assertIn("Do not use neutral fallback wording", prompt)
+        self.assertIn("Do not tell readers to check the policy page", prompt)
 
     def test_batch_prompt_blocks_unsupported_risky_business_claims(self):
         prompt = copy_gen._build_batch_prompt(
@@ -56,13 +57,14 @@ class CopyPromptTests(unittest.TestCase):
         )
 
         self.assertIn("UNSUPPORTED CLAIM RULES", prompt)
-        self.assertIn("Do not state return", prompt)
+        self.assertIn("Do not generate FAQ questions or answers about return", prompt)
         self.assertIn("shipping", prompt)
         self.assertIn("warranty", prompt)
         self.assertIn("availability", prompt)
-        self.assertIn("unless explicitly present", prompt)
+        self.assertIn("Exclude these topics entirely", prompt)
         self.assertIn("Treat AI Overview and PAA as research signals, not proof", prompt)
-        self.assertIn("flag it for review", prompt)
+        self.assertIn("Do not use neutral fallback wording", prompt)
+        self.assertIn("Do not tell readers to check the policy page", prompt)
 
     def test_solo_ecommerce_collection_prompt_generalizes_scraped_product_details(self):
         prompt = copy_gen._build_prompt(

@@ -69,7 +69,8 @@ _BIZ_CONTEXT = {
     ),
     "ecommerce": (
         "This is an ecommerce page. Answers should address buying concerns, specs, compatibility, "
-        "shipping, and returns."
+        "fit, materials, use cases, and product selection. Do not create policy, shipping, return, "
+        "availability, pricing, or warranty FAQs."
     ),
     "service": (
         "This is a service page. Answers should build trust, clarify process, and highlight expertise."
@@ -84,15 +85,18 @@ _BIZ_CONTEXT = {
 
 _UNSUPPORTED_CLAIM_GUARDRAIL = (
     "UNSUPPORTED CLAIM RULES:\n"
-    "- Do not state return, shipping, delivery, warranty, guarantee, eligibility, refund, exchange, "
-    "availability, stock, pricing, discount, compliance, legal, medical, safety, or performance claims "
-    "unless explicitly present in the page content excerpt, brand guidelines, or supplied source data.\n"
+    "- Do not generate FAQ questions or answers about return, shipping, delivery, warranty, guarantee, "
+    "eligibility, refund, exchange, availability, stock, pricing, discount, compliance, legal, medical, "
+    "safety, or performance claims.\n"
+    "- Exclude these topics entirely, even if they appear in PAA, AI Overview, scraped page content, "
+    "or generic ecommerce expectations.\n"
     "- Treat AI Overview and PAA as research signals, not proof of this business's actual policies, "
-    "inventory, pricing, warranties, or guarantees.\n"
-    "- If a risky policy or eligibility detail is not confirmed, avoid the claim or use neutral wording "
-    "that tells readers to check the relevant policy page or contact the business.\n"
-    "- If an unsupported risky claim would be needed to answer well, flag it for review by keeping the "
-    "answer general instead of inventing specifics."
+    "inventory, pricing, warranties, guarantees, or eligibility rules.\n"
+    "- Do not use neutral fallback wording for these topics.\n"
+    "- Do not tell readers to check the policy page, contact customer service, review terms, or confirm "
+    "availability, pricing, shipping, returns, refunds, exchanges, warranties, guarantees, or eligibility.\n"
+    "- Replace risky policy or claim questions with safer page-specific questions about product purpose, "
+    "features, materials, fit considerations, compatibility, use cases, care, selection, or comparisons."
 )
 
 
