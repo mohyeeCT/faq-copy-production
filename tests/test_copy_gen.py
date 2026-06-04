@@ -124,6 +124,37 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Do not mention exact variant counts", prompt)
         self.assertIn("Do not quote exact product names", prompt)
 
+    def test_parse_faq_json_records_error_for_invalid_model_output(self):
+        parsed = copy_gen._parse_faq_json("not json")
+
+        self.assertEqual(parsed, [])
+        self.assertIn("FAQ JSON parse failed", copy_gen.get_last_parse_error())
+
+    def test_batch_fallback_records_solo_retry_error(self):
+        def fake_provider(api_key, prompt, max_tokens=2048):
+            if "PAGE 1" in prompt and "PAGE 2" in prompt:
+                return '{"1": [], "2": []}'
+            raise RuntimeError("provider down")
+
+        copy_gen._PROVIDER_FN["TestProvider"] = fake_provider
+        try:
+            results, _prompt, debug = copy_gen.generate_faq_batch(
+                provider="TestProvider",
+                api_key="test",
+                pages=[
+                    {"keyword": "alpha", "page_type": "general", "business_type": "general"},
+                    {"keyword": "beta", "page_type": "general", "business_type": "general"},
+                ],
+                num_faqs=2,
+            )
+        finally:
+            copy_gen._PROVIDER_FN.pop("TestProvider", None)
+
+        self.assertEqual(results[0], [])
+        self.assertEqual(results[1], [])
+        self.assertIn("provider down", copy_gen.get_last_batch_errors()[0])
+        self.assertIn("BATCH FALLBACK ERROR", debug[0])
+
 
 if __name__ == "__main__":
     unittest.main()

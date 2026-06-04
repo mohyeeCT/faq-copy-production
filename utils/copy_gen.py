@@ -1,6 +1,17 @@
 import re
 import json
 
+_last_parse_error = ""
+_last_batch_errors = {}
+
+
+def get_last_parse_error() -> str:
+    return _last_parse_error
+
+
+def get_last_batch_errors() -> dict:
+    return dict(_last_batch_errors)
+
 
 # ── Sanitiser ────────────────────────────────────────────────────────────────
 
@@ -257,6 +268,8 @@ Return only the raw JSON array. No preamble, no explanation, no markdown code fe
 
 def _parse_faq_json(raw: str) -> list:
     """Parse JSON array from AI response. Strips markdown fences if present."""
+    global _last_parse_error
+    _last_parse_error = ""
     raw = raw.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```\s*$", "", raw)
@@ -265,8 +278,10 @@ def _parse_faq_json(raw: str) -> list:
         data = json.loads(raw)
         if isinstance(data, list):
             return data
+        _last_parse_error = f"FAQ JSON parse failed: expected array, got {type(data).__name__}"
         return []
-    except Exception:
+    except Exception as e:
+        _last_parse_error = f"FAQ JSON parse failed: {e}"
         return []
 
 
@@ -521,6 +536,8 @@ Return only the raw JSON object. No preamble, no markdown code fences."""
 
 def _parse_batch_json(raw: str, num_pages: int) -> dict:
     """Parse batch JSON response. Returns dict keyed by string page index."""
+    global _last_parse_error
+    _last_parse_error = ""
     raw = raw.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```\s*$", "", raw)
@@ -529,8 +546,9 @@ def _parse_batch_json(raw: str, num_pages: int) -> dict:
         data = json.loads(raw)
         if isinstance(data, dict):
             return data
-    except Exception:
-        pass
+        _last_parse_error = f"Batch FAQ JSON parse failed: expected object, got {type(data).__name__}"
+    except Exception as e:
+        _last_parse_error = f"Batch FAQ JSON parse failed: {e}"
     # Return empty dicts for all pages on failure
     return {str(i): [] for i in range(1, num_pages + 1)}
 
@@ -552,6 +570,9 @@ def generate_faq_batch(
     fn = _PROVIDER_FN.get(provider)
     if not fn:
         raise ValueError(f"Unknown provider: {provider}")
+
+    global _last_batch_errors
+    _last_batch_errors = {}
 
     prompt = _build_batch_prompt(pages, num_faqs)
     # Scale tokens: ~400 per FAQ × num_faqs × pages, capped at 8000
@@ -621,9 +642,15 @@ def generate_faq_batch(
                         "answer": sanitise(item.get("answer", ""), brand_name),
                         "source": item.get("source", "generated"),
                     })
-            except Exception:
-                pass
+            except Exception as e:
+                _last_batch_errors[i] = f"Solo fallback failed: {e}"
 
         results[i] = sanitised
+
+    for i, error in _last_batch_errors.items():
+        page_debug_prompts[i] = (
+            page_debug_prompts.get(i, "")
+            + f"\n\n--- BATCH FALLBACK ERROR ---\n{error}"
+        )
 
     return results, prompt, page_debug_prompts
