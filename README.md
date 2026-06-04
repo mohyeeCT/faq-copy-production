@@ -62,6 +62,10 @@ Once the target keyword is selected:
 
 For ecommerce category or collection pages, scraped product names, prices, and filters are used only as research context. FAQ prompts instruct the AI to generalize those signals and avoid exact prices, product counts, sizes, variant counts, inventory details, or exact product-name references unless the page is clearly about one specific product.
 
+## Accuracy and Unsupported Claims
+
+FAQ prompts instruct the AI not to invent return, shipping, warranty, guarantee, eligibility, availability, stock, pricing, legal, medical, safety, or performance claims unless those details are explicitly present in the supplied page context, brand guidelines, or source data. AI Overview and PAA are treated as research signals, not proof of the business's actual policies. Unsupported risky claims should be flagged for review before any automated rewrite or removal layer is added.
+
 ---
 
 ## Output Columns Written to Sheet

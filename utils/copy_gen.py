@@ -71,6 +71,20 @@ _BIZ_CONTEXT = {
 }
 
 
+_UNSUPPORTED_CLAIM_GUARDRAIL = (
+    "UNSUPPORTED CLAIM RULES:\n"
+    "- Do not state return, shipping, delivery, warranty, guarantee, eligibility, refund, exchange, "
+    "availability, stock, pricing, discount, compliance, legal, medical, safety, or performance claims "
+    "unless explicitly present in the page content excerpt, brand guidelines, or supplied source data.\n"
+    "- Treat AI Overview and PAA as research signals, not proof of this business's actual policies, "
+    "inventory, pricing, warranties, or guarantees.\n"
+    "- If a risky policy or eligibility detail is not confirmed, avoid the claim or use neutral wording "
+    "that tells readers to check the relevant policy page or contact the business.\n"
+    "- If an unsupported risky claim would be needed to answer well, flag it for review by keeping the "
+    "answer general instead of inventing specifics."
+)
+
+
 _ECOMMERCE_COLLECTION_GUARDRAIL = (
     "ECOMMERCE COLLECTION CONTEXT RULES:\n"
     "- Use ecommerce collection context as research only to understand the page theme, shopper intent, "
@@ -207,6 +221,7 @@ Business type context: {biz_ctx}
 {brand_line}
 {forbidden_line}
 {brand_guidelines_block}
+{_UNSUPPORTED_CLAIM_GUARDRAIL}
 {collection_guardrail}
 
 {context_block}
@@ -457,6 +472,7 @@ Business type: {biz_ctx}
 {brand_line}
 {forbidden_line}
 {brand_guidelines_block}
+{_UNSUPPORTED_CLAIM_GUARDRAIL}
 {collection_guardrail}
 
 {ctx}
