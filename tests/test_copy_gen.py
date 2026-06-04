@@ -33,6 +33,8 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Treat AI Overview and PAA as research signals, not proof", prompt)
         self.assertIn("Do not use neutral fallback wording", prompt)
         self.assertIn("Do not tell readers to check the policy page", prompt)
+        self.assertIn("Prefer not to reference shipping or returns", prompt)
+        self.assertIn("brand guidelines explicitly provide", prompt)
 
     def test_batch_prompt_blocks_unsupported_risky_business_claims(self):
         prompt = copy_gen._build_batch_prompt(
@@ -65,6 +67,8 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Treat AI Overview and PAA as research signals, not proof", prompt)
         self.assertIn("Do not use neutral fallback wording", prompt)
         self.assertIn("Do not tell readers to check the policy page", prompt)
+        self.assertIn("Prefer not to reference shipping or returns", prompt)
+        self.assertIn("brand guidelines explicitly provide", prompt)
 
     def test_solo_ecommerce_collection_prompt_generalizes_scraped_product_details(self):
         prompt = copy_gen._build_prompt(
@@ -95,6 +99,10 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Do not mention exact sizes", prompt)
         self.assertIn("Do not mention exact variant counts", prompt)
         self.assertIn("Do not quote exact product names", prompt)
+        self.assertIn("If you reference specific colors, sizes, patterns, styles, or prices", prompt)
+        self.assertIn("including X and other colors", prompt)
+        self.assertIn("sizes such as X and more", prompt)
+        self.assertIn("Never present scraped values as a complete or exhaustive list", prompt)
 
     def test_batch_ecommerce_collection_prompt_generalizes_scraped_product_details(self):
         prompt = copy_gen._build_batch_prompt(
@@ -125,6 +133,36 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Do not mention exact sizes", prompt)
         self.assertIn("Do not mention exact variant counts", prompt)
         self.assertIn("Do not quote exact product names", prompt)
+        self.assertIn("If you reference specific colors, sizes, patterns, styles, or prices", prompt)
+        self.assertIn("including X and other colors", prompt)
+        self.assertIn("sizes such as X and more", prompt)
+        self.assertIn("Never present scraped values as a complete or exhaustive list", prompt)
+
+    def test_brand_guidelines_are_required_for_shipping_or_returns(self):
+        prompt = copy_gen._build_prompt(
+            keyword="women's shirts",
+            page_type="collection",
+            brand_name="Army Surplus World",
+            business_type="ecommerce",
+            h1="Women's Shirts",
+            ai_overview_sections=[],
+            ai_overview_raw="",
+            paa_items=[
+                {
+                    "question": "What is the return policy for women's shirts?",
+                    "answer": "Some stores accept unworn returns.",
+                }
+            ],
+            num_faqs=4,
+            forbidden_phrases="",
+            page_context="COLLECTION CONTEXT\nProducts found:\n- Shirt | $19.99",
+            brand_guidelines="Returns are accepted within 30 days for unworn items.",
+        )
+
+        self.assertIn("BRAND & COPY GUIDELINES", prompt)
+        self.assertIn("Prefer not to reference shipping or returns", prompt)
+        self.assertIn("Only use shipping or returns information when brand guidelines explicitly provide", prompt)
+        self.assertIn("Do not use PAA, AI Overview, scraped page content, or generic ecommerce assumptions", prompt)
 
     def test_parse_faq_json_records_error_for_invalid_model_output(self):
         parsed = copy_gen._parse_faq_json("not json")
