@@ -10,6 +10,7 @@ class AppIncrementalProcessingTests(unittest.TestCase):
         source = APP_SOURCE.read_text(encoding="utf-8")
 
         self.assertIn("Processing chunk size", source)
+        self.assertIn("min_value=1, max_value=5, value=5", source)
         self.assertIn("Auto-write completed chunks to Google Sheet", source)
 
     def test_app_stores_and_displays_partial_results_during_run(self):

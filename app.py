@@ -197,8 +197,8 @@ with st.sidebar:
 
     num_faqs = st.slider(
         "Number of FAQs per page",
-        min_value=3, max_value=10, value=5,
-        help="How many Q&A pairs to generate per URL."
+        min_value=3, max_value=7, value=5,
+        help="How many Q&A pairs to generate per URL. Capped at 7 to keep outputs focused and reliable."
     )
 
     batch_size = st.slider(
@@ -209,8 +209,8 @@ with st.sidebar:
 
     processing_chunk_size = st.slider(
         "Processing chunk size",
-        min_value=1, max_value=10, value=5,
-        help="Process this many URLs end-to-end before saving partial results. Lower values reduce the chance of losing a long run."
+        min_value=1, max_value=5, value=5,
+        help="Process this many URLs end-to-end before saving partial results. Capped at 5 to reduce the chance of losing a long run."
     )
 
     auto_write_chunks = st.toggle(

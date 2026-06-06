@@ -13,6 +13,12 @@ class AppExportControlsTests(unittest.TestCase):
         self.assertIn('"Batch size (pages per AI call)"', source)
         self.assertIn("min_value=1, max_value=5, value=5", source)
 
+    def test_number_of_faqs_per_page_is_capped_at_seven(self):
+        source = APP_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn('"Number of FAQs per page"', source)
+        self.assertIn("min_value=3, max_value=7, value=5", source)
+
     def test_excel_export_is_available(self):
         source = APP_SOURCE.read_text(encoding="utf-8")
         requirements = REQUIREMENTS.read_text(encoding="utf-8")
