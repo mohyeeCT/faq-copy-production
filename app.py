@@ -3,7 +3,8 @@ import pandas as pd
 import json
 import re
 import time
-from io import StringIO
+import inspect
+from io import StringIO, BytesIO
 
 from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
@@ -12,6 +13,7 @@ from utils.keyword import select_keyword
 from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question
 from utils.niches import get_niche_context, NICHES
 from utils.scraper import scrape_page_context
+from utils.chunking import chunked
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -64,6 +66,27 @@ def _is_ecommerce_collection_page(business_type: str, page_type: str) -> bool:
         return False
     page_type_norm = (page_type or "").strip().lower()
     return "category" in page_type_norm or "collection" in page_type_norm
+
+
+_SCRAPER_SUPPORTS_MODE = "mode" in inspect.signature(scrape_page_context).parameters
+
+
+RESULT_COL_MAP = {
+    "selected_keyword": "SEO Target Keyword",
+    "keyword_source": "Keyword Source",
+    "runner_up": "Runner Up Keyword",
+    "scrape_status": "Page Scrape Status",
+    "ai_overview_raw_text": "AI Overview Content",
+    "paa_raw_text": "PAA Content",
+    "ai_overview_present": "AI Overview Present",
+    "ao_question_count": "FAQs from AI Overview",
+    "paa_count": "PAA Questions Found",
+    "faq_count": "FAQs Generated",
+    "faq_combined": "FAQ Content",
+    "faq_sources": "FAQ Sources",
+    "faq_schema_json": "FAQ Schema JSON-LD",
+    "status": "FAQ Status",
+}
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -174,14 +197,26 @@ with st.sidebar:
 
     num_faqs = st.slider(
         "Number of FAQs per page",
-        min_value=3, max_value=10, value=5,
-        help="How many Q&A pairs to generate per URL."
+        min_value=3, max_value=7, value=5,
+        help="How many Q&A pairs to generate per URL. Capped at 7 to keep outputs focused and reliable."
     )
 
     batch_size = st.slider(
         "Batch size (pages per AI call)",
-        min_value=1, max_value=50, value=5,
-        help="Group this many pages into one AI call. Higher = better cross-page differentiation. Batches above 15 recommended for Claude and OpenAI only — Gemini, Mistral and Groq may hit context or rate limits."
+        min_value=1, max_value=5, value=5,
+        help="Group this many pages into one AI call. Keep this at 5 or lower to reduce timeout and context-limit risk."
+    )
+
+    processing_chunk_size = st.slider(
+        "Processing chunk size",
+        min_value=1, max_value=5, value=5,
+        help="Process this many URLs end-to-end before saving partial results. Capped at 5 to reduce the chance of losing a long run."
+    )
+
+    auto_write_chunks = st.toggle(
+        "Auto-write completed chunks to Google Sheet",
+        value=False,
+        help="Writes completed chunks back to the connected sheet during the run. Leave off if you want to review results first."
     )
 
     load_async_ai_overview = st.toggle(
@@ -433,6 +468,14 @@ if "df" in st.session_state:
         used_question_patterns = []  # tracks fingerprints across all URLs
         progress = st.progress(0, text="Starting...")
         total = len(df_work)
+        _run_state = {
+            "batch_counter": 0,
+            "batch_debug_list": [],
+        }
+        partial_results_placeholder = st.empty()
+        partial_status = st.empty()
+        st.session_state["partial_results"] = []
+        st.session_state["partial_skipped"] = []
 
         _rate_delays = {
             "Gemini (free)": 5.0,
@@ -441,6 +484,157 @@ if "df" in st.session_state:
             "Claude": 0.5,
             "OpenAI": 0.5,
         }
+
+        def _refresh_partial_results(message: str):
+            st.session_state["partial_results"] = results
+            st.session_state["partial_skipped"] = skipped
+            partial_status.caption(message)
+            if not results:
+                return
+            partial_df = pd.DataFrame(results)
+            summary_cols = ["url", "selected_keyword", "keyword_source", "scrape_status", "faq_count", "status"]
+            available_summary = [c for c in summary_cols if c in partial_df.columns]
+            partial_results_placeholder.dataframe(
+                partial_df[available_summary],
+                use_container_width=True,
+                height=240
+            )
+
+        def _auto_write_completed_results():
+            if not auto_write_chunks or not results:
+                return
+            ws = st.session_state["ws"]
+            try:
+                write_results_to_sheet(ws, pd.DataFrame(results), RESULT_COL_MAP)
+                partial_status.caption(f"Saved {len(results)} completed rows to Google Sheet.")
+            except Exception as e:
+                st.warning(f"Auto-write failed after {len(results)} completed rows: {e}")
+
+        def _generate_pending_pages(pages_to_generate, label: str):
+            if not pages_to_generate:
+                return
+
+            MAX_SAFE_BATCH = 20
+            effective_batch_size = min(batch_size, MAX_SAFE_BATCH)
+            batches = chunked(pages_to_generate, effective_batch_size)
+            total_batches = len(batches)
+
+            for batch in batches:
+                _run_state["batch_counter"] += 1
+                batch_num = _run_state["batch_counter"]
+                progress.progress(
+                    min(len(results) / max(total, 1), 1.0),
+                    text=f"{label}: generating FAQs for {len(batch)} page(s)..."
+                )
+
+                batch_prompt_key = f"batch_{batch_num}_prompt"
+                st.session_state[batch_prompt_key] = {
+                    "batch_num": batch_num,
+                    "pages": [p["url"] for p in batch],
+                    "prompt": f"(building prompt for {len(batch)} pages...)",
+                    "prompt_chars": 0,
+                }
+                try:
+                    batch_results, batch_prompt_sent, batch_page_debug = generate_faq_batch(
+                        provider=ai_provider,
+                        api_key=ai_key,
+                        pages=batch,
+                        num_faqs=num_faqs,
+                        include_brand=include_brand,
+                    )
+                    # Update with actual prompt sent
+                    st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
+                    st.session_state[batch_prompt_key]["prompt_chars"] = len(batch_prompt_sent)
+                    st.session_state[batch_prompt_key]["page_blocks"] = list(batch_page_debug.values())
+                except Exception as e:
+                    # On batch failure, mark all pages in batch as error
+                    for page in batch:
+                        skipped.append({"row": page["row_idx"] + 2, "reason": str(e)})
+                        results.append(_empty_result(
+                            page["url"], f"error: {str(e)}", num_faqs,
+                            keyword=page["selected_keyword"], source=page["keyword_source"],
+                            scrape_status=page["scrape_status"]
+                        ))
+                    _run_state["batch_debug_list"].append(st.session_state[batch_prompt_key])
+                    _refresh_partial_results(f"{label}: batch {batch_num} failed.")
+                    continue
+
+                _run_state["batch_debug_list"].append(st.session_state[batch_prompt_key])
+
+                for local_idx, page in enumerate(batch):
+                    faq_items = batch_results.get(local_idx, [])
+
+                    if not faq_items:
+                        skipped.append({"row": page["row_idx"] + 2, "reason": "batch returned no FAQs"})
+                        results.append(_empty_result(
+                            page["url"], "error: no FAQs returned", num_faqs,
+                            keyword=page["selected_keyword"], source=page["keyword_source"],
+                            scrape_status=page["scrape_status"]
+                        ))
+                        continue
+
+                    schema_raw_json, schema_script_block = build_faq_schema(faq_items)
+
+                    # Track patterns
+                    for faq in faq_items:
+                        fp = _fingerprint_question(faq.get("question", ""), page["selected_keyword"])
+                        if fp and fp not in used_question_patterns:
+                            used_question_patterns.append(fp)
+
+                    # Get this page's specific prompt block
+                    page_block = batch_page_debug.get(local_idx, "")
+
+                    row_result = {
+                        "url": page["url"],
+                        "prompt_debug": batch_page_debug.get(local_idx, ""),
+                        "batch_prompt_sent": batch_prompt_sent,
+                        "batch_num": batch_num,
+                        "prompt_block_sent": page_block,
+                        "selected_keyword": page["selected_keyword"],
+                        "keyword_source": page["keyword_source"],
+                        "runner_up": page["runner_up"],
+                        "kw_volume": page["kw_volume"],
+                        "kw_difficulty": page["kw_difficulty"],
+                        "scrape_status": page["scrape_status"],
+                        "page_context_preview": page["page_context"],
+                        "ai_overview_present": page["ai_overview_present"],
+                        "ai_overview_async_only": page["ai_overview_async_only"],
+                        "serp_item_types": ", ".join(page["serp_item_types"]),
+                        "ao_raw_debug": page["ao_raw_debug"],
+                        "ao_raw_found": page["ao_raw_found"],
+                        "ao_attempts": page["ao_attempts"],
+                        "ai_overview_raw_text": page["ai_overview_raw_text"],
+                        "paa_raw_text": page["paa_raw_text"],
+                        "paa_raw_debug": page["paa_raw_debug"],
+                        "ao_question_count": sum(1 for f in faq_items if f.get("source") == "ai_overview"),
+                        "paa_count": page["paa_count"],
+                        "paa_questions": " | ".join(page["paa_questions"]) if page["paa_questions"] else "",
+                        "faq_count": len(faq_items),
+                        "faq_schema_json": schema_raw_json,
+                        "faq_schema_script": schema_script_block,
+                        "status": "ok"
+                    }
+
+                    # Combine all FAQs into a single cell: Q then A per pair
+                    faq_combined = "\n\n".join(
+                        f"Q: {item['question']}\nA: {item['answer']}"
+                        for item in faq_items
+                        if item.get("question")
+                    )
+                    faq_sources = ", ".join(
+                        item.get("source", "generated")
+                        for item in faq_items
+                        if item.get("question")
+                    )
+                    row_result["faq_combined"] = faq_combined
+                    row_result["faq_sources"] = faq_sources
+
+                    results.append(row_result)
+
+                _refresh_partial_results(f"{label}: {len(results)} completed row(s) visible.")
+                time.sleep(_rate_delays.get(ai_provider, 0.5))
+
+            _auto_write_completed_results()
 
         for i, row in df_work.iterrows():
             url = str(row.get(url_col, "")).strip()
@@ -623,6 +817,20 @@ if "df" in st.session_state:
                     _bg + "\n\n" + _niche_ctx if _bg.strip() else _niche_ctx
                 )
 
+            if len(pending_pages) >= int(processing_chunk_size):
+                _generate_pending_pages(
+                    pending_pages,
+                    f"Rows {pending_pages[0]['row_idx'] + 1}-{pending_pages[-1]['row_idx'] + 1}"
+                )
+                pending_pages = []
+
+        if pending_pages:
+            _generate_pending_pages(
+                pending_pages,
+                f"Rows {pending_pages[0]['row_idx'] + 1}-{pending_pages[-1]['row_idx'] + 1}"
+            )
+            pending_pages = []
+
         # ── Pass 2: Batch AI generation ──────────────────────────────────────
         _forbidden_str = "\n".join(
             p.strip() for p in forbidden_phrases.strip().splitlines() if p.strip()
@@ -634,6 +842,7 @@ if "df" in st.session_state:
         effective_batch_size = min(batch_size, MAX_SAFE_BATCH)
         batches = [pending_pages[k:k + effective_batch_size] for k in range(0, len(pending_pages), effective_batch_size)]
         total_batches = len(batches)
+        final_batch_offset = _run_state["batch_counter"]
 
         for b_idx, batch in enumerate(batches):
             progress.progress(
@@ -642,9 +851,10 @@ if "df" in st.session_state:
             )
 
             # Always store batch metadata before the API call so debug is visible even on error
-            batch_prompt_key = f"batch_{b_idx + 1}_prompt"
+            final_batch_num = final_batch_offset + b_idx + 1
+            batch_prompt_key = f"batch_{final_batch_num}_prompt"
             st.session_state[batch_prompt_key] = {
-                "batch_num": b_idx + 1,
+                "batch_num": final_batch_num,
                 "pages": [p["url"] for p in batch],
                 "prompt": f"(building prompt for {len(batch)} pages...)",
                 "prompt_chars": 0,
@@ -699,7 +909,7 @@ if "df" in st.session_state:
                     "url": page["url"],
                     "prompt_debug": batch_page_debug.get(local_idx, ""),
                     "batch_prompt_sent": batch_prompt_sent,
-                    "batch_num": b_idx + 1,
+                    "batch_num": final_batch_num,
                     "prompt_block_sent": page_block,
                     "selected_keyword": page["selected_keyword"],
                     "keyword_source": page["keyword_source"],
@@ -747,7 +957,7 @@ if "df" in st.session_state:
         progress.progress(1.0, text="Done.")
 
         # Collect all batch prompts for debug display
-        batch_debug_list = []
+        batch_debug_list = list(_run_state["batch_debug_list"])
         for k in range(total_batches):
             key = f"batch_{k + 1}_prompt"
             if key in st.session_state:
@@ -897,31 +1107,22 @@ if "results_df" in st.session_state:
             mime="text/csv"
         )
 
+        excel_buffer = BytesIO()
+        results_df.to_excel(excel_buffer, index=False, engine="openpyxl")
+        st.download_button(
+            label="Download Excel",
+            data=excel_buffer.getvalue(),
+            file_name="faq_copy_output.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
     with ec2:
         if st.button("Write Back to Google Sheet"):
             ws = st.session_state["ws"]
 
-            col_map = {
-                "selected_keyword": "SEO Target Keyword",
-                "keyword_source": "Keyword Source",
-                "runner_up": "Runner Up Keyword",
-                "scrape_status": "Page Scrape Status",
-                "ai_overview_raw_text": "AI Overview Content",
-                "paa_raw_text": "PAA Content",
-                "ai_overview_present": "AI Overview Present",
-                "ao_question_count": "FAQs from AI Overview",
-                "paa_count": "PAA Questions Found",
-                "faq_count": "FAQs Generated",
-
-                "faq_schema_json": "FAQ Schema JSON-LD",
-                "status": "FAQ Status",
-            }
-            col_map["faq_combined"] = "FAQ Content"
-            col_map["faq_sources"] = "FAQ Sources"
-
             with st.spinner("Writing to sheet..."):
                 try:
-                    write_results_to_sheet(ws, results_df, col_map)
+                    write_results_to_sheet(ws, results_df, RESULT_COL_MAP)
                     st.success(f"Done. {len(results_df)} rows written to Google Sheet.")
                 except Exception as e:
                     st.error(f"Write failed: {e}")
