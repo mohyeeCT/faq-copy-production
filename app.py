@@ -10,7 +10,7 @@ from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_data, get_serp_data_with_interrogative_fallback
 from utils.keyword import select_keyword
-from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question
+from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question, DEFAULT_MODELS
 from utils.niches import get_niche_context, NICHES
 from utils.scraper import scrape_page_context
 from utils.chunking import chunked
@@ -135,6 +135,27 @@ with st.sidebar:
         "Mistral (free tier)",
         "Groq (free tier)"
     ])
+
+    # Model selection per provider (Phase 2)
+    _model_options = {
+        "Claude": ["Default (claude-sonnet-4-6)", "claude-sonnet-4-6"],
+        "OpenAI": ["Default (gpt-5.5)", "gpt-5.5"],
+        "Gemini (free)": ["Default (gemini-2.0-flash)", "gemini-2.0-flash"],
+        "Mistral (free tier)": ["Default (mistral-small-latest)", "mistral-small-latest"],
+        "Groq (free tier)": ["Default (llama3-70b-8192)", "llama3-70b-8192"],
+    }
+
+    selected_model_display = st.selectbox(
+        "AI Model Version",
+        _model_options.get(ai_provider, ["Default"]),
+        help="Choose which model to use for FAQ generation. 'Default' uses the recommended model for this provider."
+    )
+
+    # Store the actual model name (None for Default, model name otherwise)
+    if selected_model_display.startswith("Default"):
+        st.session_state['selected_model'] = None
+    else:
+        st.session_state['selected_model'] = selected_model_display
 
     _key_labels = {
         "Claude": ("Claude API Key", "console.anthropic.com"),
@@ -541,6 +562,7 @@ if "df" in st.session_state:
                         pages=batch,
                         num_faqs=num_faqs,
                         include_brand=include_brand,
+                        model=st.session_state.get('selected_model', None),
                     )
                     # Update with actual prompt sent
                     st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
@@ -866,6 +888,7 @@ if "df" in st.session_state:
                     pages=batch,
                     num_faqs=num_faqs,
                     include_brand=include_brand,
+                    model=st.session_state.get('selected_model', None),
                 )
                 # Update with actual prompt sent
                 st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
