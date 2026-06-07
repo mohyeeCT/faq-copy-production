@@ -171,7 +171,7 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("FAQ JSON parse failed", copy_gen.get_last_parse_error())
 
     def test_batch_fallback_records_solo_retry_error(self):
-        def fake_provider(api_key, prompt, max_tokens=2048):
+        def fake_provider(api_key, prompt, max_tokens=2048, model=None):
             if "PAGE 1" in prompt and "PAGE 2" in prompt:
                 return '{"1": [], "2": []}'
             raise RuntimeError("provider down")
