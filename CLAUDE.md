@@ -8,7 +8,7 @@ Streamlit app for generating FAQ sections at scale. Standalone application that
 can be run independently or as part of the CopyPilot platform. Used for rapid
 FAQ generation with AI providers and DataForSEO integration.
 
-Default branch: `main`. Current HEAD: `2040e29`.
+Default branch: `main`. Current HEAD: `b146708`.
 Runtime: Python 3.10+ with Streamlit.
 
 ## Key Features
