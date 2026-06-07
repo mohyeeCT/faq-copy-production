@@ -3,6 +3,31 @@ import base64
 
 DFS_BASE = "https://api.dataforseo.com/v3"
 
+_last_dfs_error = ""
+
+
+def get_last_dfs_error() -> str:
+    return _last_dfs_error
+
+
+def _friendly_error(exc: Exception) -> str:
+    """Convert raw DFS exceptions into user-readable messages."""
+    msg = str(exc)
+    msg_lower = msg.lower()
+    if "401" in msg:
+        return "Invalid DataForSEO login or password."
+    if "403" in msg:
+        return "DataForSEO account lacks required API permissions."
+    if "429" in msg or "20001" in msg or "too many requests" in msg_lower:
+        return "DataForSEO rate limit reached. Wait 60 seconds and retry."
+    if "timed out" in msg_lower or "timeout" in msg_lower:
+        return "DataForSEO request timed out. Check your internet connection."
+    if "connectionerror" in msg_lower or "remotedisconnected" in msg_lower:
+        return "Cannot connect to DataForSEO API. Check your internet connection."
+    if "40501" in msg:
+        return "DataForSEO: Invalid parameters. Check location code and keyword format."
+    return f"DataForSEO error: {msg}"
+
 
 def _auth_header(login: str, password: str) -> dict:
     token = base64.b64encode(f"{login}:{password}".encode()).decode()
@@ -14,6 +39,8 @@ def _auth_header(login: str, password: str) -> dict:
 
 def get_keyword_overview(login: str, password: str, keywords: list, location_code: int = 2840) -> dict:
     """Returns dict keyed by lowercase keyword: {volume, cpc, competition}."""
+    global _last_dfs_error
+    _last_dfs_error = ""
     if not keywords:
         return {}
     payload = [{"keywords": keywords, "location_code": location_code, "language_code": "en"}]
@@ -36,12 +63,14 @@ def get_keyword_overview(login: str, password: str, keywords: list, location_cod
                     "competition": item.get("competition", 0)
                 }
         return result
-    except Exception:
+    except Exception as e:
+        _last_dfs_error = _friendly_error(e)
         return {}
 
 
 def get_keyword_difficulty(login: str, password: str, keywords: list, location_code: int = 2840) -> dict:
     """Returns dict keyed by lowercase keyword: {difficulty}."""
+    global _last_dfs_error
     if not keywords:
         return {}
     payload = [{"keywords": keywords, "location_code": location_code, "language_code": "en"}]
@@ -63,7 +92,8 @@ def get_keyword_difficulty(login: str, password: str, keywords: list, location_c
                         "difficulty": kw_item.get("keyword_difficulty", 50) or 50
                     }
         return result
-    except Exception:
+    except Exception as e:
+        _last_dfs_error = _friendly_error(e)
         return {}
 
 
