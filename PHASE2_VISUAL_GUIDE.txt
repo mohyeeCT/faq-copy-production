@@ -1,0 +1,321 @@
+================================================================================
+PHASE 2 UI CHANGES — VISUAL GUIDE
+================================================================================
+
+SIDEBAR STRUCTURE — AI PROVIDER SECTION
+
+================================================================================
+BEFORE PHASE 2 (Current)
+================================================================================
+
+┌─────────────────────────────────────────────────────────┐
+│                    🔐 SIDEBAR                           │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  🔑 Credentials                                        │
+│  └─ Service Account JSON [upload box]                  │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  📊 DataForSEO                                          │
+│  └─ Login (email):    [________________]                │
+│  └─ Password:         [████████████]                    │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  🔗 Jina Reader                                         │
+│  └─ Jina API Key:     [████████████]                    │
+│  └─ Enable page scraping: [✓] toggle                    │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  🤖 AI Provider                                         │
+│  └─ Provider:      [Claude ▼]                           │
+│                                                         │
+│  └─ Claude API Key: [████████████]                      │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  ✍️ Copy Settings                                       │
+│  └─ Business Type: [b2b ▼]                              │
+│  └─ Brand Name: [________________]                      │
+│  └─ Include brand name: [✓]                             │
+│  └─ Full Brand Name: [________________]                 │
+│  └─ Niche: [No specific niche ▼]                        │
+│  └─ Brand & Copy Guidelines: [text area...]             │
+│                                                         │
+│  ... more settings below                                │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+
+================================================================================
+AFTER PHASE 2 (With Model Selection)
+================================================================================
+
+┌─────────────────────────────────────────────────────────┐
+│                    🔐 SIDEBAR                           │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  🔑 Credentials                                        │
+│  └─ Service Account JSON [upload box]                  │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  📊 DataForSEO                                          │
+│  └─ Login (email):    [________________]                │
+│  └─ Password:         [████████████]                    │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  🔗 Jina Reader                                         │
+│  └─ Jina API Key:     [████████████]                    │
+│  └─ Enable page scraping: [✓] toggle                    │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  🤖 AI Provider                                         │
+│  └─ Provider:           [Claude ▼]                      │
+│                                                         │
+│  ┏━ NEW IN PHASE 2 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+│  ┃ └─ AI Model Version: [Default (claude-so... ▼]      ┃
+│  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+│                                                         │
+│  └─ Claude API Key:     [████████████]                  │
+│                                                         │
+│  ─────────────────────────────────────────────────────  │
+│                                                         │
+│  ✍️ Copy Settings                                       │
+│  └─ Business Type: [b2b ▼]                              │
+│  └─ Brand Name: [________________]                      │
+│  └─ Include brand name: [✓]                             │
+│  └─ Full Brand Name: [________________]                 │
+│  └─ Niche: [No specific niche ▼]                        │
+│  └─ Brand & Copy Guidelines: [text area...]             │
+│                                                         │
+│  ... more settings below                                │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ZOOMED VIEW: AI PROVIDER SECTION
+================================================================================
+
+BEFORE:
+┌────────────────────────────────┐
+│ 🤖 AI Provider                 │
+├────────────────────────────────┤
+│                                │
+│ Provider                       │
+│ [Claude ▼]                     │
+│                                │
+│ Claude API Key                 │
+│ [████████████████████]         │
+│                                │
+└────────────────────────────────┘
+
+
+AFTER (Phase 2):
+┌────────────────────────────────┐
+│ 🤖 AI Provider                 │
+├────────────────────────────────┤
+│                                │
+│ Provider                       │
+│ [Claude ▼]                     │
+│                                │
+│ AI Model Version               │  ← NEW DROPDOWN
+│ [Default (claude-sonnet...) ▼] │  ← NEW
+│                                │
+│ Claude API Key                 │
+│ [████████████████████]         │
+│                                │
+└────────────────────────────────┘
+
+
+================================================================================
+MODEL DROPDOWN OPTIONS (Per Provider)
+================================================================================
+
+WHEN USER SELECTS "Claude":
+┌───────────────────────────────────────────┐
+│ AI Model Version [Claude ▼]               │
+├───────────────────────────────────────────┤
+│ ✓ Default (claude-sonnet-4-6)            │
+│   claude-sonnet-4-6                       │
+│   claude-3-5-sonnet (future)              │
+│                                            │
+│ (More Claude models can be added later)   │
+└───────────────────────────────────────────┘
+
+
+WHEN USER SELECTS "OpenAI":
+┌───────────────────────────────────────────┐
+│ AI Model Version [OpenAI ▼]               │
+├───────────────────────────────────────────┤
+│ ✓ Default (gpt-5.5)                      │
+│   gpt-5.5                                 │
+│   gpt-4o (optional)                       │
+│                                            │
+│ (More OpenAI models can be added later)   │
+└───────────────────────────────────────────┘
+
+
+WHEN USER SELECTS "Gemini (free)":
+┌───────────────────────────────────────────┐
+│ AI Model Version [Gemini ▼]               │
+├───────────────────────────────────────────┤
+│ ✓ Default (gemini-2.0-flash)             │
+│   gemini-2.0-flash                        │
+│   gemini-1.5-pro (future)                 │
+│                                            │
+│ (More Gemini models can be added later)   │
+└───────────────────────────────────────────┘
+
+
+WHEN USER SELECTS "Mistral (free tier)":
+┌───────────────────────────────────────────┐
+│ AI Model Version [Mistral ▼]              │
+├───────────────────────────────────────────┤
+│ ✓ Default (mistral-small-latest)         │
+│   mistral-small-latest                    │
+│   mistral-medium (future)                 │
+│                                            │
+│ (More Mistral models can be added later)  │
+└───────────────────────────────────────────┘
+
+
+WHEN USER SELECTS "Groq (free tier)":
+┌───────────────────────────────────────────┐
+│ AI Model Version [Groq ▼]                 │
+├───────────────────────────────────────────┤
+│ ✓ Default (llama3-70b-8192)              │
+│   llama3-70b-8192                         │
+│   mixtral-8x7b (future)                   │
+│                                            │
+│ (More Groq models can be added later)     │
+└───────────────────────────────────────────┘
+
+
+================================================================================
+USER WORKFLOW — EXAMPLE
+================================================================================
+
+Step 1: User opens app
+┌─────────────────────────────────────┐
+│ AI Provider                         │
+├─────────────────────────────────────┤
+│ Provider: [Claude ▼]                │
+│ Model:    [Default (claude...) ▼]   │ ← Defaults shown
+│ API Key:  [________________]         │
+└─────────────────────────────────────┘
+
+Step 2: User wants to try a different model (optional)
+┌─────────────────────────────────────┐
+│ AI Provider                         │
+├─────────────────────────────────────┤
+│ Provider: [Claude ▼]                │
+│ Model:    [claude-3-5-sonnet ▼]     │ ← User changes
+│ API Key:  [████████████]            │
+└─────────────────────────────────────┘
+
+Step 3: User fills rest of form and runs generation
+   ↓ (Model selection is passed to backend)
+   ↓ (FAQ generation uses selected model)
+   ↓ Result: FAQs generated with claude-3-5-sonnet instead of default
+
+Step 4: User changes provider
+┌─────────────────────────────────────┐
+│ AI Provider                         │
+├─────────────────────────────────────┤
+│ Provider: [OpenAI ▼]                │ ← Changed
+│ Model:    [Default (gpt-5.5) ▼]     │ ← Resets to OpenAI default
+│ API Key:  [________________]         │
+└─────────────────────────────────────┘
+
+
+================================================================================
+CODE CHANGES LOCATIONS
+================================================================================
+
+FILE: app.py
+
+Line 131-137 (Current Provider Selection):
+───────────────────────────────────────────
+    ai_provider = st.selectbox("Provider", [
+        "Claude",
+        "OpenAI",
+        "Gemini (free)",
+        "Mistral (free tier)",
+        "Groq (free tier)"
+    ])
+
+    [ADD NEW MODEL SELECTBOX HERE ↓]
+
+    selected_model = st.selectbox(
+        "AI Model Version",
+        options=["Default (claude-sonnet-4-6)", "claude-sonnet-4-6"],
+        help="Choose which model to use for FAQ generation"
+    )
+    st.session_state['selected_model'] = (
+        None if "Default" in selected_model
+        else selected_model.split(" ")[0]
+    )
+
+
+Line ~538 (Batch FAQ Generation Call):
+───────────────────────────────────────────
+    BEFORE:
+    batch_results, batch_prompt_sent, batch_page_debug = generate_faq_batch(
+        provider=ai_provider,
+        api_key=ai_key,
+        pages=batch,
+        num_faqs=num_faqs,
+        include_brand=include_brand,
+    )
+
+    AFTER:
+    batch_results, batch_prompt_sent, batch_page_debug = generate_faq_batch(
+        provider=ai_provider,
+        api_key=ai_key,
+        pages=batch,
+        num_faqs=num_faqs,
+        include_brand=include_brand,
+        model=st.session_state.get('selected_model', None),  # ← NEW
+    )
+
+
+Line ~863 (Other Batch Calls, if present):
+───────────────────────────────────────────
+    Same change as above (add model parameter)
+
+
+================================================================================
+PHASE 2 SUMMARY
+================================================================================
+
+What's Being Added:
+  ✓ Model selection dropdown in sidebar
+  ✓ Per-provider model options
+  ✓ Session state storage
+  ✓ Pass model to FAQ generation calls
+
+What's NOT Changing:
+  ✗ No copy_gen.py changes (Phase 1 handles it)
+  ✗ No backend API changes
+  ✗ No database changes
+  ✗ No new dependencies
+
+User Experience Impact:
+  + Can choose specific model versions
+  + Can A/B test different models
+  + Can use older models if needed
+  + Future-proof for new models
+
+Risk Level: VERY LOW
+  ✓ Simple UI addition
+  ✓ No breaking changes
+  ✓ Optional parameter in backend
+  ✓ Easy to test locally
+
+================================================================================
