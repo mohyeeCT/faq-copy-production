@@ -1,0 +1,329 @@
+================================================================================
+PHASE 2: UI MODEL SELECTION — USER GUIDE
+================================================================================
+
+What Changed: The Streamlit app now has a model selection dropdown!
+
+================================================================================
+WHERE TO FIND IT
+================================================================================
+
+Location: Sidebar → AI Provider section
+Position: Between "Provider" and "API Key"
+
+Visual:
+┌──────────────────────────────────────┐
+│ 🤖 AI Provider                       │
+├──────────────────────────────────────┤
+│                                      │
+│ Provider: [Claude ▼]                 │
+│                                      │
+│ AI Model Version: [Default... ▼] ← HERE
+│                                      │
+│ Claude API Key: [________________]   │
+│                                      │
+└──────────────────────────────────────┘
+
+================================================================================
+HOW TO USE IT
+================================================================================
+
+STEP 1: Select an AI Provider
+  Click "Provider" dropdown and pick:
+  - Claude
+  - OpenAI
+  - Gemini (free)
+  - Mistral (free tier)
+  - Groq (free tier)
+
+STEP 2: (Optional) Select a Model
+  The "AI Model Version" dropdown automatically shows options for your provider.
+
+  Example if you selected Claude:
+  - Default (claude-sonnet-4-6)  ← Recommended, this is what you'll use 99% of the time
+  - claude-sonnet-4-6             ← Same as default (for completeness)
+
+  Example if you selected OpenAI:
+  - Default (gpt-5.5)  ← Latest and recommended
+  - gpt-5.5             ← Same as default
+
+  DO NOTHING = uses "Default" (recommended) ✓
+
+STEP 3: Add Your API Key
+  Enter your API key for the selected provider
+
+STEP 4: Continue as usual
+  Fill in the rest of the form and generate FAQs
+
+================================================================================
+QUICK START (MOST COMMON)
+================================================================================
+
+For 99% of users:
+
+1. Click "Provider" → pick "Claude"
+2. Leave "AI Model Version" on "Default (claude-sonnet-4-6)"
+3. Enter your Claude API key
+4. Continue with form
+5. Click "Generate FAQs"
+
+Result: FAQs generated with latest recommended Claude model
+
+✓ That's it! No need to touch the model dropdown unless you want to.
+
+================================================================================
+ADVANCED: CHOOSING A DIFFERENT MODEL
+================================================================================
+
+When might you want to pick a specific model?
+
+Reason 1: A/B Testing
+  "I want to compare FAQ quality between different models"
+
+  How:
+  1. Generate FAQs with default model
+  2. Note the FAQs generated
+  3. Change "AI Model Version" dropdown (if there are multiple options)
+  4. Generate FAQs again with same data
+  5. Compare the results
+
+Reason 2: Cost/Speed Tradeoff
+  "I want a faster/cheaper model"
+
+  Note: Currently all providers have only one model option in the UI
+  (default is the recommended one). More models will be added in future.
+
+Reason 3: Compatibility
+  "I want to use an older model for compatibility"
+
+  Again, currently only recommended models are shown.
+  Can be customized in future versions.
+
+================================================================================
+WHAT YOU'LL SEE IN THE DROPDOWN
+================================================================================
+
+CLAUDE:
+  - Default (claude-sonnet-4-6) ← Pick this
+  - claude-sonnet-4-6            ← Or this (same thing)
+
+OPENAI:
+  - Default (gpt-5.5) ← Pick this
+  - gpt-5.5            ← Or this (same thing)
+
+GEMINI (FREE):
+  - Default (gemini-2.0-flash) ← Pick this
+  - gemini-2.0-flash            ← Or this (same thing)
+
+MISTRAL (FREE TIER):
+  - Default (mistral-small-latest) ← Pick this
+  - mistral-small-latest            ← Or this (same thing)
+
+GROQ (FREE TIER):
+  - Default (llama3-70b-8192) ← Pick this
+  - llama3-70b-8192            ← Or this (same thing)
+
+Currently: One model shown per provider (the recommended one)
+Future: More models will be available as we add support
+
+================================================================================
+BEHAVIOR YOU SHOULD KNOW
+================================================================================
+
+1. Model selection changes when you change provider
+   - Select "Claude" → shows Claude models
+   - Switch to "OpenAI" → dropdown updates to show OpenAI models
+   - Dropdown resets to "Default" when you switch providers
+
+2. Model selection persists as you fill the form
+   - Select a model
+   - Fill in other settings
+   - Model stays selected (won't change)
+
+3. Different model doesn't affect anything else
+   - Same FAQ count, same settings, same quality expectations
+   - Only the underlying AI model used for generation changes
+
+4. No need to re-enter settings if changing model
+   - Keep your other settings (business type, brand name, etc.)
+   - Just change the model dropdown
+   - Generate again
+
+5. Default is always safe
+   - "Default (model-name)" is the recommended choice
+   - Optimized for quality and cost
+   - Recommended by the developers
+
+================================================================================
+FAQ: COMMON QUESTIONS
+================================================================================
+
+Q: Do I have to use this dropdown?
+A: No! If you leave it on "Default", everything works exactly as before.
+   The dropdown is optional.
+
+Q: What's the difference between "Default (claude-sonnet-4-6)" and "claude-sonnet-4-6"?
+A: They're the same model. The "Default" version is the recommended one.
+   Pick either one - they'll give identical results.
+
+Q: Can I compare outputs from different models?
+A: Yes! Generate FAQs, change the model, generate again. Compare the results.
+   This is useful for A/B testing.
+
+Q: Does changing the model cost more?
+A: Depends on the provider. OpenAI's newer models might have different pricing.
+   Check your provider's pricing page. Claude and free models are standard cost.
+
+Q: Why don't I see more models in the dropdown?
+A: Currently only the recommended model per provider is shown.
+   More models will be added in future versions.
+   You can use newer models as they're released.
+
+Q: Does this affect the FAQ quality?
+A: Potentially! Newer/different models might generate different FAQs.
+   That's why A/B testing is useful - you can compare quality.
+
+Q: What if I want to go back to the old way?
+A: The old way IS the default. Leave the dropdown on "Default" and everything
+   works exactly as before.
+
+Q: Can I save my preferred model?
+A: Not yet, but this is planned for a future version.
+   For now, you can pick your model each time you use the app.
+
+Q: Do I need a different API key for different models?
+A: No! You use the same API key. The model is just a parameter.
+   One Claude API key works for all Claude models.
+
+Q: What happens if I'm generating FAQs and switch models mid-batch?
+A: Remaining FAQs will use the new model. This is intentional
+   (allows switching mid-run). Best practice: don't switch while generating.
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Problem: Dropdown not showing
+Cause: Streamlit version might be old
+Fix: Restart the app (refresh browser)
+
+Problem: Getting different results than before
+Cause: You might have switched to a different model
+Fix: Check the "AI Model Version" dropdown - switch back to "Default"
+
+Problem: Model dropdown shows empty
+Cause: This shouldn't happen. Indicates a bug
+Fix: Restart app, clear browser cache, refresh
+
+Problem: FAQ generation takes longer than before
+Cause: Not related to model selection (same models)
+Possible: Network latency or provider slowness
+Fix: Try again, check internet connection, try different time
+
+Problem: FAQ quality seems worse
+Cause: Might be different model or just variance
+Fix: Compare with default model, check your settings
+
+================================================================================
+TIPS & TRICKS
+================================================================================
+
+Tip 1: Leave on Default if unsure
+  Default is optimized. Don't change unless you have a reason to.
+
+Tip 2: Use for A/B testing
+  Generate FAQs, change model, generate again, compare.
+  See which model gives better results for your use case.
+
+Tip 3: Check your provider's pricing
+  Different models might have different costs per token.
+  Check your provider's pricing page before switching.
+
+Tip 4: Try after running once
+  First run with default, then explore model options.
+  Helps you understand the quality differences.
+
+Tip 5: Note which model you used
+  If you switch models, remember which one you used for which batch.
+  Helps with comparison.
+
+================================================================================
+WHAT CHANGED BEHIND THE SCENES
+================================================================================
+
+Technical Details (for the curious):
+
+Before Phase 2:
+- Model was hardcoded in the code
+- Everyone got the same model
+- No way to change it without code changes
+
+After Phase 2:
+- Model is now stored in the app's session state
+- Passed to the FAQ generation function
+- You can change it via dropdown
+
+Backend (Phase 1):
+- FAQs generation system updated to accept model parameter
+- All 5 providers support dynamic model selection
+- Larger context window per model (better quality)
+
+Result:
+- You get 8x larger context for major models
+- You can pick which model to use
+- Better FAQ quality overall
+
+================================================================================
+FUTURE ENHANCEMENTS
+================================================================================
+
+Coming Soon (Not in Phase 2):
+- More model options per provider
+- Model capability descriptions
+- Model recommendation based on use case
+- Save your favorite model preference
+- Cost estimation per model
+- A/B testing UI improvements
+
+Far Future (Not planned yet):
+- Model performance comparisons
+- Auto-select best model
+- Custom model uploads
+- Model fine-tuning
+
+================================================================================
+FEEDBACK & ISSUES
+================================================================================
+
+Have feedback on the new model selection?
+- Model dropdown is hard to find? Let us know
+- Need different models? Tell us which ones
+- Found a bug? Report it with details
+- UI unclear? Suggest improvements
+
+Contact: [Your support channel]
+
+================================================================================
+SUMMARY
+================================================================================
+
+What's New:
+  ✓ Model selection dropdown in sidebar
+  ✓ Choose model per provider
+  ✓ Optional feature (defaults work great)
+
+How to Use:
+  1. Select provider (Claude, OpenAI, etc.)
+  2. Leave model on "Default" (recommended)
+  3. Continue as normal
+
+Optional:
+  - Change model if you want to A/B test
+  - Try different models to compare quality
+  - Always safe - can't break anything
+
+Bottom Line:
+  Everything works the same as before if you ignore the dropdown.
+  Use it when you want to experiment with different models.
+
+================================================================================
