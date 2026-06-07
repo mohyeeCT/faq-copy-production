@@ -3,7 +3,6 @@ import pandas as pd
 import json
 import re
 import time
-import inspect
 from io import StringIO
 
 from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
@@ -65,9 +64,6 @@ def _is_ecommerce_collection_page(business_type: str, page_type: str) -> bool:
         return False
     page_type_norm = (page_type or "").strip().lower()
     return "category" in page_type_norm or "collection" in page_type_norm
-
-
-_SCRAPER_SUPPORTS_MODE = "mode" in inspect.signature(scrape_page_context).parameters
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -476,10 +472,7 @@ if "df" in st.session_state:
                     else "default"
                 )
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: scraping page...")
-                if _SCRAPER_SUPPORTS_MODE:
-                    scrape_result = scrape_page_context(jina_key, url, max_chars=10000, mode=scrape_mode)
-                else:
-                    scrape_result = scrape_page_context(jina_key, url, max_chars=10000)
+                scrape_result = scrape_page_context(jina_key, url, max_chars=10000, mode=scrape_mode)
                 if scrape_result["success"]:
                     page_context = scrape_result["content"]
                     scrape_label = "ecommerce collection" if scrape_mode == "ecommerce_collection" else "default"

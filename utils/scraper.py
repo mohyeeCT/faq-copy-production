@@ -222,7 +222,7 @@ def _build_collection_context(text: str, max_chars: int) -> tuple:
     return content, title
 
 
-def scrape_page_context(api_key: str, url: str, max_chars: int = 4000, mode: str = "default") -> dict:
+def scrape_page_context(api_key: str, url: str, max_chars: int = 10000, mode: str = "default") -> dict:
     """Scrape a page via Jina Reader and return cleaned topic context.
 
     Strategy:
