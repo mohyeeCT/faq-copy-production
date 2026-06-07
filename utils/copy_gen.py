@@ -307,13 +307,25 @@ DEFAULT_MODELS = {
     "Groq (free tier)": "llama3-70b-8192"
 }
 
-# Provider max_tokens defaults
+# Provider max_tokens defaults (single-page generation)
 _PROVIDER_MAX_TOKENS = {
     "Claude": 16384,
     "OpenAI": 16384,
     "Gemini (free)": 4096,
     "Mistral (free tier)": 4096,
     "Groq (free tier)": 4096,
+}
+
+# Batch-specific max_tokens ceiling — higher than single-page to prevent truncation
+# on large batches. Only pay for tokens actually used; this is just a safety cap.
+# Claude/OpenAI: 100k (well within 200k/128k context limits)
+# Others: 8192 (hard model output limit for Gemini, Mistral small, Groq llama3-70b)
+_BATCH_MAX_TOKENS = {
+    "Claude": 100000,
+    "OpenAI": 100000,
+    "Gemini (free)": 8192,
+    "Mistral (free tier)": 8192,
+    "Groq (free tier)": 8192,
 }
 
 
@@ -619,9 +631,9 @@ def generate_faq_batch(
     _last_batch_errors = {}
 
     prompt = _build_batch_prompt(pages, num_faqs)
-    # Scale tokens: ~400 per FAQ × num_faqs × pages, capped at provider max
-    provider_max = _PROVIDER_MAX_TOKENS.get(provider, 8192)
-    batch_max_tokens = min(provider_max, max(2048, len(pages) * num_faqs * 400))
+    # Scale tokens: ~400 per FAQ × num_faqs × pages, capped at batch-specific provider max
+    safe_max = _BATCH_MAX_TOKENS.get(provider, 64000)
+    batch_max_tokens = min(safe_max, max(2048, len(pages) * num_faqs * 400))
     raw = fn(api_key, prompt, max_tokens=batch_max_tokens, model=model)
     parsed = _parse_batch_json(raw, len(pages))
 
