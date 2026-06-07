@@ -298,54 +298,83 @@ def _parse_faq_json(raw: str) -> list:
 
 # ── Provider routing ──────────────────────────────────────────────────────────
 
-def _call_claude(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
+# Default models for each provider (matched with SaaS backend for consistency)
+DEFAULT_MODELS = {
+    "Claude": "claude-sonnet-4-6",
+    "OpenAI": "gpt-5.5",
+    "Gemini (free)": "gemini-2.0-flash",
+    "Mistral (free tier)": "mistral-small-latest",
+    "Groq (free tier)": "llama3-70b-8192"
+}
+
+# Provider max_tokens defaults
+_PROVIDER_MAX_TOKENS = {
+    "Claude": 16384,
+    "OpenAI": 16384,
+    "Gemini (free)": 4096,
+    "Mistral (free tier)": 4096,
+    "Groq (free tier)": 4096,
+}
+
+
+def _call_claude(api_key: str, prompt: str, max_tokens: int = 16384, model: str = None) -> str:
     import anthropic
+    if model is None:
+        model = DEFAULT_MODELS["Claude"]
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
     return msg.content[0].text
 
 
-def _call_openai(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
+def _call_openai(api_key: str, prompt: str, max_tokens: int = 16384, model: str = None) -> str:
     from openai import OpenAI
+    if model is None:
+        model = DEFAULT_MODELS["OpenAI"]
     client = OpenAI(api_key=api_key)
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.choices[0].message.content
 
 
-def _call_gemini(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
+def _call_gemini(api_key: str, prompt: str, max_tokens: int = 4096, model: str = None) -> str:
     from google import genai
+    if model is None:
+        model = DEFAULT_MODELS["Gemini (free)"]
     client = genai.Client(api_key=api_key)
     resp = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model=model,
         contents=prompt
     )
     return resp.text
 
 
-def _call_mistral(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
+def _call_mistral(api_key: str, prompt: str, max_tokens: int = 4096, model: str = None) -> str:
     from mistralai.client import Mistral
+    if model is None:
+        model = DEFAULT_MODELS["Mistral (free tier)"]
     client = Mistral(api_key=api_key)
     resp = client.chat.complete(
-        model="mistral-small-latest",
+        model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.choices[0].message.content
 
 
-def _call_groq(api_key: str, prompt: str, max_tokens: int = 2048) -> str:
+def _call_groq(api_key: str, prompt: str, max_tokens: int = 4096, model: str = None) -> str:
     from groq import Groq
+    if model is None:
+        model = DEFAULT_MODELS["Groq (free tier)"]
     client = Groq(api_key=api_key)
     resp = client.chat.completions.create(
-        model="llama3-70b-8192",
+        model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -380,6 +409,7 @@ def generate_faq(
     used_question_patterns: list = None,
     brand_guidelines: str = "",
     include_brand: bool = True,
+    model: str = None,
 ) -> list:
     """Generate FAQ Q&A pairs using the selected AI provider.
 
@@ -408,7 +438,9 @@ def generate_faq(
         brand_guidelines=brand_guidelines,
     )
 
-    raw = fn(api_key, prompt)
+    # Use provider-specific max_tokens
+    max_tokens = _PROVIDER_MAX_TOKENS.get(provider, 8192)
+    raw = fn(api_key, prompt, max_tokens=max_tokens, model=model)
     items = _parse_faq_json(raw)
 
     sanitised = []
@@ -570,6 +602,7 @@ def generate_faq_batch(
     pages: list,
     num_faqs: int,
     include_brand: bool = True,
+    model: str = None,
 ) -> tuple:
     """Generate FAQs for multiple pages in a single AI call.
 
@@ -586,9 +619,10 @@ def generate_faq_batch(
     _last_batch_errors = {}
 
     prompt = _build_batch_prompt(pages, num_faqs)
-    # Scale tokens: ~400 per FAQ × num_faqs × pages, capped at 8000
-    batch_max_tokens = min(64000, max(2048, len(pages) * num_faqs * 400))
-    raw = fn(api_key, prompt, max_tokens=batch_max_tokens)
+    # Scale tokens: ~400 per FAQ × num_faqs × pages, capped at provider max
+    provider_max = _PROVIDER_MAX_TOKENS.get(provider, 8192)
+    batch_max_tokens = min(provider_max, max(2048, len(pages) * num_faqs * 400))
+    raw = fn(api_key, prompt, max_tokens=batch_max_tokens, model=model)
     parsed = _parse_batch_json(raw, len(pages))
 
     # Build per-page debug summaries showing exactly what context the AI received
@@ -643,7 +677,8 @@ def generate_faq_batch(
         if not sanitised:
             try:
                 solo_prompt = _build_batch_prompt([page], num_faqs)
-                solo_raw = fn(api_key, solo_prompt, max_tokens=2048)
+                solo_max_tokens = _PROVIDER_MAX_TOKENS.get(provider, 8192)
+                solo_raw = fn(api_key, solo_prompt, max_tokens=solo_max_tokens, model=model)
                 solo_parsed = _parse_batch_json(solo_raw, 1)
                 for item in (solo_parsed.get("1") or []):
                     if not isinstance(item, dict):
