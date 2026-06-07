@@ -692,6 +692,24 @@ if "df" in st.session_state:
                 if scrape_result["success"]:
                     page_context = scrape_result["content"]
                     scrape_label = "ecommerce collection" if scrape_mode == "ecommerce_collection" else "default"
+
+                    # Defensive check: if collection mode was used, verify content
+                    # actually contains collection markers — if not, re-scrape with
+                    # default mode to avoid using empty/wrong collection context
+                    if scrape_mode == "ecommerce_collection":
+                        has_collection_markers = (
+                            "Products found:" in page_context or
+                            "Filters found:" in page_context or
+                            "COLLECTION CONTEXT" in page_context
+                        )
+                        if not has_collection_markers:
+                            fallback_result = scrape_page_context(jina_key, url, max_chars=10000, mode="default")
+                            if fallback_result["success"]:
+                                page_context = fallback_result["content"]
+                                scrape_label = "default (collection fallback)"
+                            else:
+                                scrape_label = "default (collection fallback failed)"
+
                     scrape_status = f"ok {scrape_label} ({len(page_context)} chars)"
                 else:
                     scrape_status = f"failed: {scrape_result['error'][:80]}"
