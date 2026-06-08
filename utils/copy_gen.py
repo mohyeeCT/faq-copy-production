@@ -278,7 +278,9 @@ source values: "ai_overview" if inspired by the AI Overview, "paa" if inspired b
 Return only the raw JSON array. No preamble, no explanation, no markdown code fences."""
 
 def _parse_faq_json(raw: str) -> list:
-    """Parse JSON array from AI response. Strips markdown fences if present."""
+    """Parse JSON array from AI response. Strips markdown fences if present.
+    Attempts partial recovery if JSON is truncated mid-response.
+    """
     global _last_parse_error
     _last_parse_error = ""
     raw = raw.strip()
@@ -293,6 +295,17 @@ def _parse_faq_json(raw: str) -> list:
         return []
     except Exception as e:
         _last_parse_error = f"FAQ JSON parse failed: {e}"
+        # Attempt partial recovery: find the last complete object in the array.
+        # Useful when max_tokens cuts off the response mid-JSON.
+        try:
+            last_bracket = raw.rfind('},')
+            if last_bracket > 0:
+                partial = raw[:last_bracket + 1] + ']'
+                data = json.loads(partial)
+                if isinstance(data, list) and data:
+                    return data
+        except Exception:
+            pass
         return []
 
 
