@@ -252,8 +252,8 @@ with st.sidebar:
 
     processing_chunk_size = st.slider(
         "Processing chunk size",
-        min_value=1, max_value=5, value=5,
-        help="Process this many URLs end-to-end before saving partial results. Capped at 5 to reduce the chance of losing a long run."
+        min_value=1, max_value=5, value=1,
+        help="Process this many URLs end-to-end before saving partial results. Default 1 writes every row immediately — only increase if you want larger AI batches and can afford to lose a partial chunk if the run is interrupted."
     )
 
     auto_write_chunks = st.toggle(
@@ -601,6 +601,7 @@ if "df" in st.session_state:
                         ))
                     _run_state["batch_debug_list"].append(st.session_state[batch_prompt_key])
                     _refresh_partial_results(f"{label}: batch {batch_num} failed.")
+                    _auto_write_completed_results()
                     continue
 
                 _run_state["batch_debug_list"].append(st.session_state[batch_prompt_key])
@@ -676,9 +677,8 @@ if "df" in st.session_state:
                     results.append(row_result)
 
                 _refresh_partial_results(f"{label}: {len(results)} completed row(s) visible.")
+                _auto_write_completed_results()
                 time.sleep(_rate_delays.get(ai_provider, 0.5))
-
-            _auto_write_completed_results()
 
         for i, row in df_work.iterrows():
             url = str(row.get(url_col, "")).strip()
