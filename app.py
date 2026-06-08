@@ -252,8 +252,8 @@ with st.sidebar:
 
     processing_chunk_size = st.slider(
         "Processing chunk size",
-        min_value=1, max_value=5, value=5,
-        help="Process this many URLs end-to-end before saving partial results. Capped at 5 to reduce the chance of losing a long run."
+        min_value=1, max_value=5, value=1,
+        help="Process this many URLs end-to-end before saving partial results. Default 1 writes every row immediately — only increase if you want larger AI batches and can afford to lose a partial chunk if the run is interrupted."
     )
 
     auto_write_chunks = st.toggle(
@@ -320,7 +320,7 @@ if sheet_url and sa_file:
         gc = get_gspread_client(sa_info)
         df, spreadsheet, ws = load_sheet(gc, sheet_url, worksheet_name or None)
         st.success(f"Connected. {len(df)} rows loaded.")
-        st.dataframe(df.head(5), use_container_width=True)
+        st.dataframe(df.head(5), width="stretch")
         st.session_state["df"] = df
         st.session_state["ws"] = ws
         st.session_state["sa_info"] = sa_info
@@ -539,7 +539,7 @@ if "df" in st.session_state:
             available_summary = [c for c in summary_cols if c in partial_df.columns]
             partial_results_placeholder.dataframe(
                 partial_df[available_summary],
-                use_container_width=True,
+                width="stretch",
                 height=240
             )
 
@@ -601,6 +601,7 @@ if "df" in st.session_state:
                         ))
                     _run_state["batch_debug_list"].append(st.session_state[batch_prompt_key])
                     _refresh_partial_results(f"{label}: batch {batch_num} failed.")
+                    _auto_write_completed_results()
                     continue
 
                 _run_state["batch_debug_list"].append(st.session_state[batch_prompt_key])
@@ -676,9 +677,8 @@ if "df" in st.session_state:
                     results.append(row_result)
 
                 _refresh_partial_results(f"{label}: {len(results)} completed row(s) visible.")
+                _auto_write_completed_results()
                 time.sleep(_rate_delays.get(ai_provider, 0.5))
-
-            _auto_write_completed_results()
 
         for i, row in df_work.iterrows():
             url = str(row.get(url_col, "")).strip()
@@ -1056,7 +1056,7 @@ if "results_df" in st.session_state:
     summary_cols = ["url", "selected_keyword", "keyword_source", "scrape_status", "ai_overview_present", "ao_question_count", "paa_count", "faq_count", "status"]
     available_summary = [c for c in summary_cols if c in results_df.columns]
     st.subheader("Summary")
-    st.dataframe(results_df[available_summary], use_container_width=True, height=300)
+    st.dataframe(results_df[available_summary], width="stretch", height=300)
 
     st.subheader("FAQ Preview")
     for _, row in results_df.iterrows():
@@ -1136,7 +1136,7 @@ if "results_df" in st.session_state:
 
     if skipped:
         with st.expander(f"Skipped rows ({skip_count})"):
-            st.dataframe(pd.DataFrame(skipped), use_container_width=True)
+            st.dataframe(pd.DataFrame(skipped), width="stretch")
 
     st.header("7. Export")
 
@@ -1153,7 +1153,19 @@ if "results_df" in st.session_state:
         )
 
         excel_buffer = BytesIO()
-        results_df.to_excel(excel_buffer, index=False, engine="openpyxl")
+        _EXCEL_TRUNCATE_COLS = [
+            "ai_overview_raw_text",
+            "paa_raw_text",
+            "page_context_preview",
+            "batch_prompt_sent",
+        ]
+        excel_df = results_df.copy()
+        for _col in _EXCEL_TRUNCATE_COLS:
+            if _col in excel_df.columns:
+                excel_df[_col] = excel_df[_col].apply(
+                    lambda v: v[:30000] if isinstance(v, str) and len(v) > 30000 else v
+                )
+        excel_df.to_excel(excel_buffer, index=False, engine="openpyxl")
         st.download_button(
             label="Download Excel",
             data=excel_buffer.getvalue(),
