@@ -249,6 +249,7 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 10000, mode: st
         "X-With-Links-Summary": "false",
         "X-With-Images-Summary": "false",
         "X-Remove-Selector": remove_selector,
+        "X-No-Cache": "true",   # always fetch live page, never serve stale cached snapshot
         "X-Timeout": "30",
     }
     if api_key:
