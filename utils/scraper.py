@@ -85,9 +85,14 @@ def _score_paragraph(para: str) -> float:
 
     Penalises: short lines, link-heavy lines, price/button text.
     Rewards: sentence-like text with multiple words.
+
+    Threshold is 5 words (not 8) — noise items like "Add to cart",
+    "Sold out", "Check availability" are already caught by
+    _NOISE_LINE_PATTERNS before scoring, so the word floor only
+    needs to block truly empty or single-token remnants.
     """
     words = para.split()
-    if len(words) < 8:
+    if len(words) < 5:
         return 0.0
 
     # Penalise link density
