@@ -198,6 +198,17 @@ with st.sidebar:
         help="Adjusts tone, CTA style, and copy patterns."
     )
 
+    ecommerce_default_page_type = "general"
+    if business_type == "ecommerce":
+        ecommerce_default_page_type = st.selectbox(
+            "Default page type",
+            ["category", "collection", "general"],
+            help="Applied to all rows where the sheet has no page_type column or the cell is empty. "
+                 "Choose 'category' or 'collection' to activate ecommerce collection scraping mode "
+                 "(extracts products, filters, and page structure instead of generic paragraphs). "
+                 "A page_type column in your sheet overrides this default per row."
+        )
+
     brand_name = st.text_input("Brand Name", placeholder="Acme Inc.")
     include_brand = st.checkbox("Include brand name in copy", value=True)
 
@@ -688,7 +699,7 @@ if "df" in st.session_state:
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: skipped")
                 continue
 
-            page_type = "general"
+            page_type = ecommerce_default_page_type
             if page_type_col != "(none)":
                 pt = str(row.get(page_type_col, "")).strip()
                 if pt:
