@@ -200,14 +200,14 @@ with st.sidebar:
 
     ecommerce_default_page_type = "general"
     if business_type == "ecommerce":
-        ecommerce_default_page_type = st.selectbox(
-            "Default page type",
-            ["category", "collection", "general"],
-            help="Applied to all rows where the sheet has no page_type column or the cell is empty. "
-                 "Choose 'category' or 'collection' to activate ecommerce collection scraping mode "
-                 "(extracts products, filters, and page structure instead of generic paragraphs). "
-                 "A page_type column in your sheet overrides this default per row."
-        )
+        if st.checkbox(
+            "All pages are category / collection pages",
+            value=True,
+            help="Activates collection-mode scraping: extracts products, filters, and page structure "
+                 "instead of generic paragraphs. Applies to all rows where the sheet has no page_type "
+                 "column. A page_type column in your sheet overrides this per row."
+        ):
+            ecommerce_default_page_type = "category"
 
     brand_name = st.text_input("Brand Name", placeholder="Acme Inc.")
     include_brand = st.checkbox("Include brand name in copy", value=True)
