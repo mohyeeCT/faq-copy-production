@@ -43,6 +43,7 @@ _NOISE_LINE_PATTERNS = re.compile(
     r"Check availability|Service Center|"
     r"Skip to content|Log in|Sign in|"
     r"Search$|Menu$|Close$|"
+    r"This page does not seem to contain|"  # Jina metadata placeholders
     r"\+?1?[\s\-.]?\(?\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4}"  # phone numbers
     r")\s*$",
     re.IGNORECASE
@@ -227,6 +228,47 @@ def _build_collection_context(text: str, max_chars: int) -> tuple:
     return content, title
 
 
+def _process_default_text(text: str, max_chars: int, noise_pattern: re.Pattern) -> tuple:
+    """Process raw Jina markdown into clean page context for default (non-collection) mode.
+
+    Returns (content, title).  content is "" if nothing substantive survived.
+    """
+    title = _extract_title(text)
+
+    # Drop image syntax, pure link-only list lines, heading-only link lines
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+    text = re.sub(r"^\s*\*\s+\[.+?\]\(https?://.+?\)\s*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^#{1,4}\s+\[.+?\]\(https?://.+?\)\s*$", "", text, flags=re.MULTILINE)
+
+    # Drop noise lines
+    lines = [l for l in text.splitlines() if not noise_pattern.match(l)]
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+    if not text:
+        return "", title
+
+    # Score paragraphs: keep substantive ones and headings
+    result_paras = []
+    chars_used = 0
+    for para in re.split(r"\n{2,}", text):
+        if chars_used >= max_chars:
+            break
+        is_heading = para.strip().startswith("#")
+        if _score_paragraph(para) > 0 or is_heading:
+            result_paras.append(para)
+            chars_used += len(para)
+
+    content = "\n\n".join(result_paras).strip()
+
+    # Final trim to max_chars at sentence boundary
+    if len(content) > max_chars:
+        truncated = content[:max_chars]
+        last_period = truncated.rfind(".")
+        content = truncated[: last_period + 1].strip() if last_period > max_chars * 0.5 else truncated.strip()
+
+    return content, title
+
+
 def scrape_page_context(api_key: str, url: str, max_chars: int = 10000, mode: str = "default") -> dict:
     """Scrape a page via Jina Reader and return cleaned topic context.
 
@@ -277,54 +319,24 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 10000, mode: st
                         "error": "No collection products, filters, or content found"}
             return {"content": content, "title": title, "success": True, "error": ""}
 
-        # Extract title from Jina metadata block
-        title = _extract_title(text)
+        # Default mode: standard page scraping
+        content, title = _process_default_text(text, max_chars, _NOISE_LINE_PATTERNS)
 
-        # Drop image lines, pure link-list lines, and heading-wrapped links
-        text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
-        text = re.sub(r"^\s*\*\s+\[.+?\]\(https?://.+?\)\s*$", "", text, flags=re.MULTILINE)
-        text = re.sub(r"^#{1,4}\s+\[.+?\]\(https?://.+?\)\s*$", "", text, flags=re.MULTILINE)
-
-        # Drop known noise lines
-        lines = text.splitlines()
-        lines = [l for l in lines if not _NOISE_LINE_PATTERNS.match(l)]
-        text = "\n".join(lines)
-
-        # Collapse whitespace
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        text = text.strip()
-
-        if not text:
-            return {"content": "", "title": title, "success": False,
-                    "error": "No content found after stripping boilerplate"}
-
-        # Score paragraphs and keep the best ones up to max_chars
-        paragraphs = re.split(r"\n{2,}", text)
-        scored = [(p, _score_paragraph(p)) for p in paragraphs]
-
-        # Always keep headings (## lines) as they provide structure context
-        # Sort non-heading paragraphs by score, then interleave with headings
-        # to preserve reading order in the final output
-        result_paras = []
-        chars_used = 0
-        for para, score in scored:
-            if chars_used >= max_chars:
-                break
-            is_heading = para.strip().startswith("#")
-            if score > 0 or is_heading:
-                result_paras.append(para)
-                chars_used += len(para)
-
-        content = "\n\n".join(result_paras).strip()
-
-        # Final trim to max_chars at sentence boundary
-        if len(content) > max_chars:
-            truncated = content[:max_chars]
-            last_period = truncated.rfind(".")
-            if last_period > max_chars * 0.5:
-                content = truncated[: last_period + 1].strip()
-            else:
-                content = truncated.strip()
+        # If content is very short the X-Remove-Selector may have stripped the
+        # site's main content container (e.g. a div with class*='navigation').
+        # Retry once without it to recover the full page text.
+        _CONTENT_MIN_CHARS = 300
+        if len(content) < _CONTENT_MIN_CHARS and "X-Remove-Selector" in headers:
+            try:
+                headers_clean = {k: v for k, v in headers.items() if k != "X-Remove-Selector"}
+                resp2 = requests.get(f"{JINA_BASE}/{url}", headers=headers_clean, timeout=35)
+                if resp2.status_code == 200 and resp2.text.strip():
+                    content2, title2 = _process_default_text(resp2.text.strip(), max_chars, _NOISE_LINE_PATTERNS)
+                    if len(content2) > len(content):
+                        content = content2
+                        title = title2 or title
+            except Exception:
+                pass  # keep original content if retry fails
 
         if not content:
             return {"content": "", "title": title, "success": False,
