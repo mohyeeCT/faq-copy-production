@@ -322,22 +322,6 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 10000, mode: st
         # Default mode: standard page scraping
         content, title = _process_default_text(text, max_chars, _NOISE_LINE_PATTERNS)
 
-        # If content is very short the X-Remove-Selector may have stripped the
-        # site's main content container (e.g. a div with class*='navigation').
-        # Retry once without it to recover the full page text.
-        _CONTENT_MIN_CHARS = 300
-        if len(content) < _CONTENT_MIN_CHARS and "X-Remove-Selector" in headers:
-            try:
-                headers_clean = {k: v for k, v in headers.items() if k != "X-Remove-Selector"}
-                resp2 = requests.get(f"{JINA_BASE}/{url}", headers=headers_clean, timeout=35)
-                if resp2.status_code == 200 and resp2.text.strip():
-                    content2, title2 = _process_default_text(resp2.text.strip(), max_chars, _NOISE_LINE_PATTERNS)
-                    if len(content2) > len(content):
-                        content = content2
-                        title = title2 or title
-            except Exception:
-                pass  # keep original content if retry fails
-
         if not content:
             return {"content": "", "title": title, "success": False,
                     "error": "No substantive content found after scoring"}
