@@ -124,11 +124,14 @@ _ECOMMERCE_COLLECTION_GUARDRAIL = (
 
 _PRODUCT_NAME_REPETITION_GUARDRAIL = (
     "PRODUCT NAME REPETITION RULE:\n"
-    "- Do not repeat the exact product name more than 3 times total across all FAQ questions and answers "
+    "- Do not repeat the exact product name more than 2 times total across all FAQ questions and answers "
     "for a specific product page.\n"
-    "- Use natural references like this product, this item, this style, this option, or the category name "
-    "after the product has been clearly introduced.\n"
-    "- Keep the copy specific, but avoid making every question and answer start with or repeat the same exact product name."
+    "- Do not use partial product-name variations, shortened halves of the product name, or repeated brand/product fragments "
+    "unless the phrase is the generic item or category the product represents.\n"
+    "- Use natural references like this product, this item, this style, this option, or the category name after the product "
+    "has been clearly introduced.\n"
+    "- Keep the copy specific, but avoid making every question and answer start with or repeat the same exact product name "
+    "or a near-duplicate variation."
 )
 
 

@@ -35,7 +35,9 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Do not tell readers to check the policy page", prompt)
         self.assertIn("Prefer not to reference shipping or returns", prompt)
         self.assertIn("brand guidelines explicitly provide", prompt)
-        self.assertIn("Do not repeat the exact product name more than 3 times total", prompt)
+        self.assertIn("Do not repeat the exact product name more than 2 times total", prompt)
+        self.assertIn("Do not use partial product-name variations", prompt)
+        self.assertIn("unless the phrase is the generic item or category", prompt)
         self.assertIn("Use natural references like this product", prompt)
 
     def test_batch_prompt_blocks_unsupported_risky_business_claims(self):
@@ -71,7 +73,9 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Do not tell readers to check the policy page", prompt)
         self.assertIn("Prefer not to reference shipping or returns", prompt)
         self.assertIn("brand guidelines explicitly provide", prompt)
-        self.assertIn("Do not repeat the exact product name more than 3 times total", prompt)
+        self.assertIn("Do not repeat the exact product name more than 2 times total", prompt)
+        self.assertIn("Do not use partial product-name variations", prompt)
+        self.assertIn("unless the phrase is the generic item or category", prompt)
         self.assertIn("Use natural references like this product", prompt)
 
     def test_solo_ecommerce_collection_prompt_generalizes_scraped_product_details(self):
