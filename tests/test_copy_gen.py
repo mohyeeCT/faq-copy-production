@@ -39,6 +39,8 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Do not use partial product-name variations", prompt)
         self.assertIn("unless the phrase is the generic item or category", prompt)
         self.assertIn("Use natural references like this product", prompt)
+        self.assertIn("Use the main keyword naturally no more than 1 to 2 times total", prompt)
+        self.assertIn("Do not force the exact keyword into every question or answer", prompt)
 
     def test_batch_prompt_blocks_unsupported_risky_business_claims(self):
         prompt = copy_gen._build_batch_prompt(
@@ -77,6 +79,8 @@ class CopyPromptTests(unittest.TestCase):
         self.assertIn("Do not use partial product-name variations", prompt)
         self.assertIn("unless the phrase is the generic item or category", prompt)
         self.assertIn("Use natural references like this product", prompt)
+        self.assertIn("Use the main keyword naturally no more than 1 to 2 times total", prompt)
+        self.assertIn("Do not force the exact keyword into every question or answer", prompt)
 
     def test_solo_ecommerce_collection_prompt_generalizes_scraped_product_details(self):
         prompt = copy_gen._build_prompt(

@@ -135,6 +135,16 @@ _PRODUCT_NAME_REPETITION_GUARDRAIL = (
 )
 
 
+_MAIN_KEYWORD_USAGE_GUARDRAIL = (
+    "MAIN KEYWORD USAGE RULE:\n"
+    "- Use the main keyword naturally no more than 1 to 2 times total across all FAQ questions and answers "
+    "for that page.\n"
+    "- Do not force the exact keyword into every question or answer.\n"
+    "- After the keyword is introduced, use natural phrasing, pronouns, category terms, or page-specific context "
+    "instead of repeating the same keyword."
+)
+
+
 def _is_ecommerce_collection_context(business_type: str, page_type: str, page_context: str = "") -> bool:
     business_type_norm = (business_type or "").strip().lower()
     page_type_norm = (page_type or "").strip().lower()
@@ -258,6 +268,7 @@ Business type context: {biz_ctx}
 {brand_guidelines_block}
 {_UNSUPPORTED_CLAIM_GUARDRAIL}
 {_PRODUCT_NAME_REPETITION_GUARDRAIL}
+{_MAIN_KEYWORD_USAGE_GUARDRAIL}
 {collection_guardrail}
 
 {context_block}
@@ -604,6 +615,7 @@ Rules for all pages:
 - Do not create FAQs that feel redundant with existing copy unless the FAQ format adds clear value
 - Only keep FAQ ideas that fit naturally with the page and fill a real gap or improve clarity
 {_PRODUCT_NAME_REPETITION_GUARDRAIL}
+{_MAIN_KEYWORD_USAGE_GUARDRAIL}
 
 {pages_text}
 
