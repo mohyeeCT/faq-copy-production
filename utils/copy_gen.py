@@ -122,6 +122,16 @@ _ECOMMERCE_COLLECTION_GUARDRAIL = (
 )
 
 
+_PRODUCT_NAME_REPETITION_GUARDRAIL = (
+    "PRODUCT NAME REPETITION RULE:\n"
+    "- Do not repeat the exact product name more than 3 times total across all FAQ questions and answers "
+    "for a specific product page.\n"
+    "- Use natural references like this product, this item, this style, this option, or the category name "
+    "after the product has been clearly introduced.\n"
+    "- Keep the copy specific, but avoid making every question and answer start with or repeat the same exact product name."
+)
+
+
 def _is_ecommerce_collection_context(business_type: str, page_type: str, page_context: str = "") -> bool:
     business_type_norm = (business_type or "").strip().lower()
     page_type_norm = (page_type or "").strip().lower()
@@ -244,6 +254,7 @@ Business type context: {biz_ctx}
 {forbidden_line}
 {brand_guidelines_block}
 {_UNSUPPORTED_CLAIM_GUARDRAIL}
+{_PRODUCT_NAME_REPETITION_GUARDRAIL}
 {collection_guardrail}
 
 {context_block}
@@ -589,6 +600,7 @@ Rules for all pages:
 - Do not create FAQs that repeat what the page copy already covers too closely
 - Do not create FAQs that feel redundant with existing copy unless the FAQ format adds clear value
 - Only keep FAQ ideas that fit naturally with the page and fill a real gap or improve clarity
+{_PRODUCT_NAME_REPETITION_GUARDRAIL}
 
 {pages_text}
 
