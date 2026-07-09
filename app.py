@@ -139,28 +139,28 @@ with st.sidebar:
     # Model selection per provider (Phase 2)
     _model_options = {
         "Claude": [
-            "Default (claude-sonnet-4-6)",
+            f'Default ({DEFAULT_MODELS["Claude"]})',
             "claude-opus-4-5",
             "claude-haiku-3-5",
         ],
         "OpenAI": [
-            "Default (gpt-5.5)",
+            f'Default ({DEFAULT_MODELS["OpenAI"]})',
             "gpt-4o",
             "gpt-4o-mini",
             "gpt-4-turbo",
         ],
         "Gemini (free)": [
-            "Default (gemini-2.0-flash)",
+            f'Default ({DEFAULT_MODELS["Gemini (free)"]})',
             "gemini-2.0-flash-lite",
             "gemini-1.5-pro",
         ],
         "Mistral (free tier)": [
-            "Default (mistral-small-latest)",
+            f'Default ({DEFAULT_MODELS["Mistral (free tier)"]})',
             "mistral-medium-latest",
             "mistral-large-latest",
         ],
         "Groq (free tier)": [
-            "Default (llama3-70b-8192)",
+            f'Default ({DEFAULT_MODELS["Groq (free tier)"]})',
             "llama3-8b-8192",
             "llama-3.1-70b-versatile",
             "mixtral-8x7b-32768",
