@@ -5,9 +5,46 @@ from utils import copy_gen
 
 class CopyPromptTests(unittest.TestCase):
     def test_provider_default_models_match_current_recommended_defaults(self):
-        self.assertEqual(copy_gen.DEFAULT_MODELS["Claude"], "claude-sonnet-4-6")
-        self.assertEqual(copy_gen.DEFAULT_MODELS["OpenAI"], "gpt-5.5")
-        self.assertEqual(copy_gen.DEFAULT_MODELS["Groq (free tier)"], "llama3-70b-8192")
+        self.assertEqual(
+            copy_gen.DEFAULT_MODELS,
+            {
+                "Claude": "claude-sonnet-5",
+                "OpenAI": "gpt-5.5",
+                "Gemini (free)": "gemini-3.5-flash",
+            },
+        )
+
+    def test_sonnet_5_request_disables_thinking_for_json_tasks(self):
+        options = copy_gen._anthropic_request_options("claude-sonnet-5", 2048)
+
+        self.assertEqual(options["model"], "claude-sonnet-5")
+        self.assertEqual(options["max_tokens"], 2048)
+        self.assertEqual(options["extra_body"], {"thinking": {"type": "disabled"}})
+        self.assertNotIn("thinking", options)
+
+    def test_anthropic_text_extractor_skips_non_text_blocks(self):
+        class Block:
+            def __init__(self, type_, text=None):
+                self.type = type_
+                self.text = text
+
+        self.assertEqual(
+            copy_gen._extract_anthropic_text([
+                Block("thinking"),
+                Block("text", "Generated FAQ JSON"),
+            ]),
+            "Generated FAQ JSON",
+        )
+
+    def test_openai_gpt5_models_use_completion_token_parameter(self):
+        self.assertEqual(
+            copy_gen._openai_token_limit("gpt-5.5", 123),
+            {"max_completion_tokens": 123},
+        )
+        self.assertEqual(
+            copy_gen._openai_token_limit("gpt-5.4", 456),
+            {"max_completion_tokens": 456},
+        )
 
     def test_solo_prompt_blocks_unsupported_risky_business_claims(self):
         prompt = copy_gen._build_prompt(

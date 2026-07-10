@@ -13,8 +13,8 @@ Runtime: Python 3.10+ with Streamlit.
 
 ## Key Features
 
-- **AI Provider Support:** Claude, OpenAI, Gemini, Mistral, Groq
-- **Dynamic Model Selection:** Phase 2 - Users can select specific models per provider
+- **AI Provider Support:** Claude, OpenAI, Gemini
+- **Dynamic Model Selection:** Users can select approved models per provider
 - **DataForSEO Integration:** Keyword volume, difficulty, SERP data, PAA
 - **Google Search Console:** Top queries per URL
 - **Page Scraping:** Jina Reader integration with ecommerce collection mode
@@ -23,21 +23,14 @@ Runtime: Python 3.10+ with Streamlit.
 
 ## Recent Improvements (Gap #2)
 
-### Phase 1: Dynamic Model Configuration (Backend)
-- Added DEFAULT_MODELS dictionary for all 5 providers
-- Added provider-specific max_tokens (16384 for Claude/OpenAI, 4096 others)
-- Updated all provider functions with optional model parameter
-- Expanded context budget 8x for major AI providers
-- File: `utils/copy_gen.py`
-
-### Phase 2: UI Model Selection (Frontend)
-- Added model selection dropdown in sidebar
-- Per-provider model options
-- Session state management
+### Current AI Model Configuration
+- Approved providers: Claude, OpenAI, Gemini
+- Default models are aligned with the other Streamlit copy apps
+- Model selection dropdown is available in the sidebar
 - Model passed to FAQ generation
-- File: `app.py`
+- Files: `app.py`, `utils/copy_gen.py`
 
-**Impact:** Users can now A/B test models, and FAQs benefit from 8x better context.
+**Impact:** Users can choose from the approved model set without exposing retired providers.
 
 ## File Structure
 
@@ -57,16 +50,14 @@ requirements.txt       — Python dependencies
 
 ## Model Versions (Current)
 
-- **Claude:** claude-sonnet-4-6
-- **OpenAI:** gpt-5.5
-- **Gemini:** gemini-2.0-flash
-- **Mistral:** mistral-small-latest
-- **Groq:** llama3-70b-8192
+- **Claude:** claude-sonnet-5, claude-sonnet-4-6, claude-haiku-4-5-20251001
+- **OpenAI:** gpt-5.5, gpt-5.4
+- **Gemini:** gemini-3.5-flash
 
 ## Token Budgets (Current)
 
 - **Claude/OpenAI:** 16,384 tokens (8x from original 2,048)
-- **Others:** 4,096 tokens (2x from original 2,048)
+- **Gemini:** 4,096 tokens
 
 ## Running Locally
 

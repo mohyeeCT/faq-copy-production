@@ -338,11 +338,9 @@ def _parse_faq_json(raw: str) -> list:
 
 # Default models for each provider (matched with SaaS backend for consistency)
 DEFAULT_MODELS = {
-    "Claude": "claude-sonnet-4-6",
+    "Claude": "claude-sonnet-5",
     "OpenAI": "gpt-5.5",
-    "Gemini (free)": "gemini-2.0-flash",
-    "Mistral (free tier)": "mistral-small-latest",
-    "Groq (free tier)": "llama3-70b-8192"
+    "Gemini (free)": "gemini-3.5-flash",
 }
 
 # Provider max_tokens defaults (single-page generation)
@@ -350,21 +348,41 @@ _PROVIDER_MAX_TOKENS = {
     "Claude": 16384,
     "OpenAI": 16384,
     "Gemini (free)": 4096,
-    "Mistral (free tier)": 4096,
-    "Groq (free tier)": 4096,
 }
 
 # Batch-specific max_tokens ceiling — higher than single-page to prevent truncation
 # on large batches. Only pay for tokens actually used; this is just a safety cap.
 # Claude/OpenAI: 100k (well within 200k/128k context limits)
-# Others: 8192 (hard model output limit for Gemini, Mistral small, Groq llama3-70b)
+# Gemini: 8192 to keep free-tier batch responses bounded.
 _BATCH_MAX_TOKENS = {
     "Claude": 100000,
     "OpenAI": 100000,
     "Gemini (free)": 8192,
-    "Mistral (free tier)": 8192,
-    "Groq (free tier)": 8192,
 }
+
+
+def _extract_anthropic_text(content) -> str:
+    text = "\n".join(
+        str(block.text)
+        for block in (content or [])
+        if getattr(block, "type", "text") == "text" and getattr(block, "text", None)
+    ).strip()
+    if not text:
+        raise RuntimeError("AI provider returned an empty text response")
+    return text
+
+
+def _anthropic_request_options(model: str, max_tokens: int) -> dict:
+    options = {"model": model, "max_tokens": max_tokens}
+    if (model or "").startswith("claude-sonnet-5"):
+        options["extra_body"] = {"thinking": {"type": "disabled"}}
+    return options
+
+
+def _openai_token_limit(model: str, max_tokens: int) -> dict:
+    if (model or "").startswith("gpt-5"):
+        return {"max_completion_tokens": max_tokens}
+    return {"max_tokens": max_tokens}
 
 
 def _call_claude(api_key: str, prompt: str, max_tokens: int = 16384, model: str = None) -> str:
@@ -373,11 +391,10 @@ def _call_claude(api_key: str, prompt: str, max_tokens: int = 16384, model: str 
         model = DEFAULT_MODELS["Claude"]
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
+        **_anthropic_request_options(model, max_tokens),
         messages=[{"role": "user", "content": prompt}]
     )
-    return msg.content[0].text
+    return _extract_anthropic_text(msg.content)
 
 
 def _call_openai(api_key: str, prompt: str, max_tokens: int = 16384, model: str = None) -> str:
@@ -387,7 +404,7 @@ def _call_openai(api_key: str, prompt: str, max_tokens: int = 16384, model: str 
     client = OpenAI(api_key=api_key)
     resp = client.chat.completions.create(
         model=model,
-        max_tokens=max_tokens,
+        **_openai_token_limit(model, max_tokens),
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.choices[0].message.content
@@ -405,38 +422,10 @@ def _call_gemini(api_key: str, prompt: str, max_tokens: int = 4096, model: str =
     return resp.text
 
 
-def _call_mistral(api_key: str, prompt: str, max_tokens: int = 4096, model: str = None) -> str:
-    from mistralai.client import Mistral
-    if model is None:
-        model = DEFAULT_MODELS["Mistral (free tier)"]
-    client = Mistral(api_key=api_key)
-    resp = client.chat.complete(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return resp.choices[0].message.content
-
-
-def _call_groq(api_key: str, prompt: str, max_tokens: int = 4096, model: str = None) -> str:
-    from groq import Groq
-    if model is None:
-        model = DEFAULT_MODELS["Groq (free tier)"]
-    client = Groq(api_key=api_key)
-    resp = client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return resp.choices[0].message.content
-
-
 _PROVIDER_FN = {
     "Claude": _call_claude,
     "OpenAI": _call_openai,
     "Gemini (free)": _call_gemini,
-    "Mistral (free tier)": _call_mistral,
-    "Groq (free tier)": _call_groq,
 }
 
 
