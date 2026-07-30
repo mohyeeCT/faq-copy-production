@@ -9,9 +9,10 @@ from io import StringIO, BytesIO
 from utils.sheets import get_gspread_client, load_sheet, write_results_to_sheet
 from utils.gsc import get_gsc_client, get_top_queries_for_url
 from utils.dfs import get_keyword_overview, get_keyword_difficulty, get_serp_data, get_serp_data_with_interrogative_fallback
-from utils.keyword import select_keyword
+from utils.keyword import resolve_h1_keyword_fallback, select_keyword
 from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question, DEFAULT_MODELS
 from utils.niches import get_niche_context, NICHES
+from utils.page_types import normalize_page_type
 from utils.scraper import scrape_page_context
 from utils.chunking import chunked
 
@@ -361,7 +362,10 @@ if "df" in st.session_state:
             placeholder="https://example.com/ or sc-domain:example.com"
         )
     else:
-        st.caption("GSC disabled. Keyword will be taken from the sheet keyword column. Rows with no keyword will be skipped.")
+        st.caption(
+            "GSC disabled. Keyword will be taken from the sheet keyword column, "
+            "then the H1 column as a fallback. Rows with neither will be skipped."
+        )
 
     # ── Section 4: Brand Detection ────────────────────────────────────────────
 
@@ -684,6 +688,7 @@ if "df" in st.session_state:
                 pt = str(row.get(page_type_col, "")).strip()
                 if pt:
                     page_type = pt
+            page_type = normalize_page_type(page_type)
 
             h1_value = ""
             if h1_col != "(none)":
@@ -778,8 +783,7 @@ if "df" in st.session_state:
                 else:
                     keyword_source = keyword_source or "fallback: no GSC data"
             else:
-                # GSC disabled and no manual keyword — skip this row
-                keyword_source = "skipped: GSC disabled and no keyword in sheet"
+                selected_keyword, keyword_source = resolve_h1_keyword_fallback(h1_value)
 
             if not selected_keyword:
                 skipped.append({"row": i + 2, "reason": keyword_source})

@@ -2,6 +2,13 @@ import math
 import re
 
 
+def resolve_h1_keyword_fallback(h1: str) -> tuple:
+    keyword = str(h1 or "").strip()
+    if keyword and keyword.lower() not in {"none", "nan", "<na>"}:
+        return keyword, "h1 fallback"
+    return None, "skipped: GSC disabled and no keyword or H1 in sheet"
+
+
 def _stem(word: str) -> str:
     """Minimal suffix stripping for relevance overlap scoring."""
     word = word.lower()
@@ -69,7 +76,8 @@ def select_keyword(
 
         dfs = dfs_data.get(query.lower(), {})
         volume = dfs.get("volume", 0) or 0
-        difficulty = dfs.get("difficulty", 50) or 50
+        raw_difficulty = dfs.get("difficulty")
+        difficulty = max(raw_difficulty if raw_difficulty is not None else 50, 1)
 
         pos_score = _position_score(position)
         rel_score = _relevance_score(query, h1)

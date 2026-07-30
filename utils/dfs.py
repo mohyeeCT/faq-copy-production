@@ -88,8 +88,9 @@ def get_keyword_difficulty(login: str, password: str, keywords: list, location_c
             for item in (task.get("result") or []):
                 for kw_item in (item.get("items") or []):
                     kw = kw_item.get("keyword", "").lower()
+                    difficulty = kw_item.get("keyword_difficulty")
                     result[kw] = {
-                        "difficulty": kw_item.get("keyword_difficulty", 50) or 50
+                        "difficulty": difficulty if difficulty is not None else 50
                     }
         return result
     except Exception as e:
