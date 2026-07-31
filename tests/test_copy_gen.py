@@ -4,6 +4,45 @@ from utils import copy_gen
 
 
 class CopyPromptTests(unittest.TestCase):
+    def test_solo_and_batch_prompts_block_internal_source_language(self):
+        solo_prompt = copy_gen._build_prompt(
+            keyword="running shoes",
+            page_type="product",
+            brand_name="Acme",
+            business_type="ecommerce",
+            h1="Running Shoes",
+            ai_overview_sections=[],
+            ai_overview_raw="",
+            paa_items=[],
+            num_faqs=5,
+            forbidden_phrases="",
+            page_context="The live product page specifically positions the shoe for trails.",
+        )
+        batch_prompt = copy_gen._build_batch_prompt(
+            [
+                {
+                    "keyword": "running shoes",
+                    "page_type": "product",
+                    "brand_name": "Acme",
+                    "business_type": "ecommerce",
+                    "h1": "Running Shoes",
+                    "page_context": "The live product page also offers trail details.",
+                }
+            ],
+            5,
+        )
+
+        for prompt in (solo_prompt, batch_prompt):
+            self.assertIn("CUSTOMER-FACING SOURCE LANGUAGE RULE", prompt)
+            self.assertIn("Use page content, search results, keywords, and brand guidance silently", prompt)
+            self.assertIn("the live product page states", prompt)
+            self.assertIn("State supported details directly and naturally", prompt)
+            self.assertIn(
+                "Internal-source terms are allowed when they are genuinely part of the topic",
+                prompt,
+            )
+            self.assertIn("required JSON metadata", prompt)
+
     def test_solo_and_batch_prompts_require_us_english(self):
         solo_prompt = copy_gen._build_prompt(
             keyword="running shoes",

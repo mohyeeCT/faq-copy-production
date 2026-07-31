@@ -15,6 +15,29 @@ U.S. ENGLISH REQUIREMENT:
 """.strip()
 
 
+CUSTOMER_FACING_OUTPUT_RULE = """
+CUSTOMER-FACING SOURCE LANGUAGE RULE:
+- Write only publication-ready, customer-facing copy.
+- Use page content, search results, keywords, and brand guidance silently as
+  grounding. Never describe, cite, or narrate the source material, supplied
+  context, prompt, scraping, or research process.
+- Do not write phrases such as "the live product page states," "the product
+  page offers," "the page positions," "according to the provided context," or
+  "the scraped content shows."
+- Never expose internal research labels such as AI Overview, People Also Ask,
+  PAA, GSC, Google Search Console, DataForSEO, or DFS as source attribution in
+  customer-facing copy.
+- State supported details directly and naturally without explaining where they
+  came from.
+- Internal-source terms are allowed when they are genuinely part of the topic,
+  target keyword, service, product, or official name. The word "page" is also
+  allowed in those cases, but never use either as source attribution.
+- Internal structured fields required by the output schema may retain their
+  required JSON metadata values; do not expose those values in customer-facing
+  text.
+""".strip()
+
+
 _NON_US_ENGLISH_SPELLING = re.compile(
     r"\b(?:"
     r"analys(?:e|ed|es|ing|er|ers)"

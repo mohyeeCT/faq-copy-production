@@ -1,7 +1,7 @@
 import re
 import json
 
-from utils.language import US_ENGLISH_OUTPUT_RULE
+from utils.language import CUSTOMER_FACING_OUTPUT_RULE, US_ENGLISH_OUTPUT_RULE
 
 _last_parse_error = ""
 _last_batch_errors = {}
@@ -269,6 +269,7 @@ Business type context: {biz_ctx}
 {forbidden_line}
 {brand_guidelines_block}
 {US_ENGLISH_OUTPUT_RULE}
+{CUSTOMER_FACING_OUTPUT_RULE}
 {_UNSUPPORTED_CLAIM_GUARDRAIL}
 {_PRODUCT_NAME_REPETITION_GUARDRAIL}
 {_MAIN_KEYWORD_USAGE_GUARDRAIL}
@@ -595,6 +596,7 @@ Business type: {biz_ctx}
 For each page, generate exactly {num_faqs} FAQ questions that real visitors would ask about THAT SPECIFIC PAGE.
 
 {US_ENGLISH_OUTPUT_RULE}
+{CUSTOMER_FACING_OUTPUT_RULE}
 
 Rules for all pages:
 - Focus on what is unique and specific to each page — not generic questions that apply to every page in the category
