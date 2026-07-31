@@ -1,6 +1,8 @@
 import re
 import json
 
+from utils.language import US_ENGLISH_OUTPUT_RULE
+
 _last_parse_error = ""
 _last_batch_errors = {}
 
@@ -234,7 +236,7 @@ def _build_prompt(
                 ao_lines.append(f"- {s['content']}")
         ao_block = (
             "GOOGLE AI OVERVIEW (highest priority signal — Google already surfaced these subtopics "
-            "for this keyword. Mirror this structure in the FAQs to maximise AI Overview citation potential):\n"
+            "for this keyword. Mirror this structure in the FAQs to maximize AI Overview citation potential):\n"
             + "\n".join(ao_lines)
         )
     else:
@@ -266,6 +268,7 @@ Business type context: {biz_ctx}
 {brand_line}
 {forbidden_line}
 {brand_guidelines_block}
+{US_ENGLISH_OUTPUT_RULE}
 {_UNSUPPORTED_CLAIM_GUARDRAIL}
 {_PRODUCT_NAME_REPETITION_GUARDRAIL}
 {_MAIN_KEYWORD_USAGE_GUARDRAIL}
@@ -590,6 +593,8 @@ Business type: {biz_ctx}
     return f"""You are an expert SEO copywriter. Generate FAQ content for {len(pages)} web pages listed below.
 
 For each page, generate exactly {num_faqs} FAQ questions that real visitors would ask about THAT SPECIFIC PAGE.
+
+{US_ENGLISH_OUTPUT_RULE}
 
 Rules for all pages:
 - Focus on what is unique and specific to each page — not generic questions that apply to every page in the category
