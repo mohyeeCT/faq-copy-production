@@ -4,6 +4,39 @@ from utils import copy_gen
 
 
 class CopyPromptTests(unittest.TestCase):
+    def test_solo_and_batch_prompts_require_us_english(self):
+        solo_prompt = copy_gen._build_prompt(
+            keyword="running shoes",
+            page_type="product",
+            brand_name="Acme",
+            business_type="ecommerce",
+            h1="Running Shoes",
+            ai_overview_sections=[],
+            ai_overview_raw="",
+            paa_items=[],
+            num_faqs=5,
+            forbidden_phrases="",
+            page_context="A UK source uses colour and prioritise.",
+        )
+        batch_prompt = copy_gen._build_batch_prompt(
+            [
+                {
+                    "keyword": "running shoes",
+                    "page_type": "product",
+                    "brand_name": "Acme",
+                    "business_type": "ecommerce",
+                    "h1": "Running Shoes",
+                    "page_context": "A UK source uses colour and prioritise.",
+                }
+            ],
+            5,
+        )
+
+        for prompt in (solo_prompt, batch_prompt):
+            self.assertIn("U.S. ENGLISH REQUIREMENT", prompt)
+            self.assertIn("Do not imitate British spelling", prompt)
+            self.assertIn("Preserve official brand and product names", prompt)
+
     def test_provider_default_models_match_current_recommended_defaults(self):
         self.assertEqual(
             copy_gen.DEFAULT_MODELS,
