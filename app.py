@@ -13,6 +13,7 @@ from utils.keyword import resolve_h1_keyword_fallback, select_keyword
 from utils.copy_gen import generate_faq, generate_faq_batch, build_faq_schema, _fingerprint_question, DEFAULT_MODELS
 from utils.niches import get_niche_context, NICHES
 from utils.page_types import normalize_page_type
+from utils.run_info import build_run_metadata, estimate_faq_run
 from utils.scraper import scrape_page_context
 from utils.chunking import chunked
 
@@ -86,6 +87,10 @@ RESULT_COL_MAP = {
     "faq_combined": "FAQ Content",
     "faq_sources": "FAQ Sources",
     "faq_schema_json": "FAQ Schema JSON-LD",
+    "run_id": "Run ID",
+    "generated_at": "Generated At",
+    "provider": "Provider",
+    "model": "Model",
     "status": "FAQ Status",
 }
 
@@ -259,7 +264,11 @@ with st.sidebar:
     load_async_ai_overview = st.toggle(
         "Load async AI Overview",
         value=True,
-        help="Fetches AI Overview content even when it loads asynchronously in Google. Doubles the DFS cost for that call (~$0.001 per keyword). Disable to reduce cost on large runs."
+        help=(
+            "Fetches AI Overview content even when it loads asynchronously in Google. "
+            "Adds up to $0.002 per SERP request when async content is retrieved; "
+            "DataForSEO refunds the extra charge when it is absent."
+        )
     )
 
     forbidden_phrases = st.text_area(
@@ -473,6 +482,59 @@ if "df" in st.session_state:
 
     st.header("5. Run")
 
+    _preview_valid_rows = 0
+    _preview_manual_rows = 0
+    for _, _preview_row in df.iterrows():
+        _preview_url_raw = _preview_row.get(url_col, "")
+        _preview_url = (
+            ""
+            if pd.isna(_preview_url_raw)
+            else str(_preview_url_raw).strip()
+        )
+        if not _preview_url.startswith("http"):
+            continue
+        _preview_valid_rows += 1
+        if keyword_col != "(none)":
+            _preview_keyword_raw = _preview_row.get(keyword_col, "")
+            _preview_keyword = (
+                ""
+                if pd.isna(_preview_keyword_raw)
+                else str(_preview_keyword_raw).strip()
+            )
+            if _preview_keyword:
+                _preview_manual_rows += 1
+
+    _run_estimate = estimate_faq_run(
+        valid_rows=_preview_valid_rows,
+        gsc_enrichment_rows=(
+            _preview_valid_rows - _preview_manual_rows
+            if use_gsc
+            else 0
+        ),
+        batch_size=int(batch_size),
+        processing_chunk_size=int(processing_chunk_size),
+        load_async_ai_overview=load_async_ai_overview,
+    )
+    st.subheader("Run Preview")
+    _rp1, _rp2, _rp3, _rp4 = st.columns(4)
+    _rp1.metric("Rows to process", _run_estimate["rows"])
+    _rp2.metric("AI calls (up to)", _run_estimate["ai_calls"])
+    _rp3.metric(
+        "DFS requests",
+        f"{_run_estimate['dfs_calls_min']}-{_run_estimate['dfs_calls_max']}",
+    )
+    _rp4.metric(
+        "Estimated DFS cost",
+        f"${_run_estimate['dfs_cost_min']:.3f}-${_run_estimate['dfs_cost_max']:.3f}",
+    )
+    st.caption(
+        "Approximate DataForSEO range based on current public list pricing and the "
+        "app's retry, interrogative-fallback, PAA-click, and enrichment paths. "
+        f"Current batching allows up to {batch_size} page(s) per AI call inside "
+        f"{processing_chunk_size}-page processing chunks. AI token charges are not "
+        "included because prompt and output tokens vary by batch."
+    )
+
     ready = (
         sa_file is not None and
         dfs_login and dfs_password and
@@ -490,6 +552,19 @@ if "df" in st.session_state:
         df_work = st.session_state["df"].copy()
         sa_info = st.session_state["sa_info"]
         gsc_client = get_gsc_client(sa_info) if use_gsc else None
+        selected_model = (
+            st.session_state.get("selected_model")
+            or DEFAULT_MODELS.get(ai_provider, "")
+        )
+        run_metadata = build_run_metadata(
+            provider=ai_provider,
+            model=selected_model,
+        )
+
+        def _run_empty_result(*args, **kwargs):
+            result = _empty_result(*args, **kwargs)
+            result.update(run_metadata)
+            return result
 
         _manual = [t.strip().lower() for t in branded_terms_input.strip().splitlines() if t.strip()]
         _auto = st.session_state.get("confirmed_branded", [])
@@ -579,7 +654,7 @@ if "df" in st.session_state:
                         pages=batch,
                         num_faqs=num_faqs,
                         include_brand=include_brand,
-                        model=st.session_state.get('selected_model', None),
+                        model=selected_model,
                     )
                     # Update with actual prompt sent
                     st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
@@ -589,7 +664,7 @@ if "df" in st.session_state:
                     # On batch failure, mark all pages in batch as error
                     for page in batch:
                         skipped.append({"row": page["row_idx"] + 2, "reason": str(e)})
-                        results.append(_empty_result(
+                        results.append(_run_empty_result(
                             page["url"], f"error: {str(e)}", num_faqs,
                             keyword=page["selected_keyword"], source=page["keyword_source"],
                             scrape_status=page["scrape_status"]
@@ -606,7 +681,7 @@ if "df" in st.session_state:
 
                     if not faq_items:
                         skipped.append({"row": page["row_idx"] + 2, "reason": "batch returned no FAQs"})
-                        results.append(_empty_result(
+                        results.append(_run_empty_result(
                             page["url"], "error: no FAQs returned", num_faqs,
                             keyword=page["selected_keyword"], source=page["keyword_source"],
                             scrape_status=page["scrape_status"]
@@ -668,6 +743,7 @@ if "df" in st.session_state:
                     )
                     row_result["faq_combined"] = faq_combined
                     row_result["faq_sources"] = faq_sources
+                    row_result.update(run_metadata)
 
                     results.append(row_result)
 
@@ -679,7 +755,7 @@ if "df" in st.session_state:
             url = str(row.get(url_col, "")).strip()
             if not url or not url.startswith("http"):
                 skipped.append({"row": i + 2, "reason": "Invalid or missing URL"})
-                results.append(_empty_result(url, "skipped: invalid URL", num_faqs))
+                results.append(_run_empty_result(url, "skipped: invalid URL", num_faqs))
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: skipped")
                 continue
 
@@ -787,7 +863,7 @@ if "df" in st.session_state:
 
             if not selected_keyword:
                 skipped.append({"row": i + 2, "reason": keyword_source})
-                results.append(_empty_result(url, f"skipped: {keyword_source}", num_faqs))
+                results.append(_run_empty_result(url, f"skipped: {keyword_source}", num_faqs))
                 progress.progress((i + 1) / total, text=f"Row {i + 1}/{total}: skipped ({keyword_source})")
                 continue
 
@@ -905,7 +981,7 @@ if "df" in st.session_state:
                     pages=batch,
                     num_faqs=num_faqs,
                     include_brand=include_brand,
-                    model=st.session_state.get('selected_model', None),
+                    model=selected_model,
                 )
                 # Update with actual prompt sent
                 st.session_state[batch_prompt_key]["prompt"] = batch_prompt_sent
@@ -915,7 +991,7 @@ if "df" in st.session_state:
                 # On batch failure, mark all pages in batch as error
                 for page in batch:
                     skipped.append({"row": page["row_idx"] + 2, "reason": str(e)})
-                    results.append(_empty_result(
+                    results.append(_run_empty_result(
                         page["url"], f"error: {str(e)}", num_faqs,
                         keyword=page["selected_keyword"], source=page["keyword_source"],
                         scrape_status=page["scrape_status"]
@@ -927,7 +1003,7 @@ if "df" in st.session_state:
 
                 if not faq_items:
                     skipped.append({"row": page["row_idx"] + 2, "reason": "batch returned no FAQs"})
-                    results.append(_empty_result(
+                    results.append(_run_empty_result(
                         page["url"], "error: no FAQs returned", num_faqs,
                         keyword=page["selected_keyword"], source=page["keyword_source"],
                         scrape_status=page["scrape_status"]
@@ -989,6 +1065,7 @@ if "df" in st.session_state:
                 )
                 row_result["faq_combined"] = faq_combined
                 row_result["faq_sources"] = faq_sources
+                row_result.update(run_metadata)
 
                 results.append(row_result)
 
@@ -1048,7 +1125,9 @@ if "results_df" in st.session_state:
     m2.metric("Generated", ok_count)
     m3.metric("Skipped / Errors", skip_count)
 
-    summary_cols = ["url", "selected_keyword", "keyword_source", "scrape_status", "ai_overview_present", "ao_question_count", "paa_count", "faq_count", "status"]
+    summary_cols = ["url", "run_id", "generated_at", "provider", "model", "selected_keyword",
+                    "keyword_source", "scrape_status", "ai_overview_present", "ao_question_count",
+                    "paa_count", "faq_count", "status"]
     available_summary = [c for c in summary_cols if c in results_df.columns]
     st.subheader("Summary")
     st.dataframe(results_df[available_summary], width="stretch", height=300)
