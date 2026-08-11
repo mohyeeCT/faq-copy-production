@@ -1,7 +1,12 @@
 import re
+import time
 import requests
 
 JINA_BASE = "https://r.jina.ai"
+_JINA_TIMEOUT_SECONDS = 45
+_REQUEST_TIMEOUT_SECONDS = 55
+_TRANSIENT_STATUS_CODES = {502, 503, 504}
+_TRANSIENT_RETRY_DELAY_SECONDS = 2.0
 
 # Elements to strip server-side via Jina's X-Remove-Selector.
 # More reliable than X-Target-Selector because we remove known noise
@@ -269,6 +274,14 @@ def _process_default_text(text: str, max_chars: int, noise_pattern: re.Pattern) 
     return content, title
 
 
+def _get_reader_response(url: str, headers: dict):
+    return requests.get(
+        f"{JINA_BASE}/{url}",
+        headers=headers,
+        timeout=_REQUEST_TIMEOUT_SECONDS,
+    )
+
+
 def scrape_page_context(api_key: str, url: str, max_chars: int = 10000, mode: str = "default") -> dict:
     """Scrape a page via Jina Reader and return cleaned topic context.
 
@@ -292,18 +305,31 @@ def scrape_page_context(api_key: str, url: str, max_chars: int = 10000, mode: st
         "X-With-Images-Summary": "false",
         "X-Remove-Selector": remove_selector,
         "X-No-Cache": "true",   # always fetch live page, never serve stale cached snapshot
-        "X-Timeout": "30",
+        "X-Timeout": str(_JINA_TIMEOUT_SECONDS),
     }
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
     try:
-        resp = requests.get(f"{JINA_BASE}/{url}", headers=headers, timeout=35)
+        retried_without_selector = False
+        try:
+            resp = _get_reader_response(url, headers)
+        except requests.exceptions.Timeout:
+            headers.pop("X-Remove-Selector", None)
+            resp = _get_reader_response(url, headers)
+            retried_without_selector = True
 
         # If remove selector causes issues, retry clean
-        if resp.status_code in (422, 400):
+        if not retried_without_selector and resp.status_code in (422, 400):
             headers.pop("X-Remove-Selector", None)
-            resp = requests.get(f"{JINA_BASE}/{url}", headers=headers, timeout=35)
+            resp = _get_reader_response(url, headers)
+        elif (
+            not retried_without_selector
+            and resp.status_code in _TRANSIENT_STATUS_CODES
+        ):
+            time.sleep(_TRANSIENT_RETRY_DELAY_SECONDS)
+            headers.pop("X-Remove-Selector", None)
+            resp = _get_reader_response(url, headers)
 
         resp.raise_for_status()
         text = resp.text.strip()
