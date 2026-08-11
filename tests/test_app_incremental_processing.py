@@ -25,6 +25,12 @@ class AppIncrementalProcessingTests(unittest.TestCase):
         self.assertIn("RESULT_COL_MAP", source)
         self.assertIn("write_results_to_sheet(ws, pd.DataFrame(results), RESULT_COL_MAP)", source)
 
+    def test_debug_widget_state_is_scoped_to_each_run(self):
+        source = APP_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn('debug_run_id = str(row.get("run_id", "") or "legacy")', source)
+        self.assertIn('key=f"debug_{debug_run_id}_{url_key}"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1139,6 +1139,7 @@ if "results_df" in st.session_state:
 
         row_idx = list(results_df.iterrows()).index((_, row)) if False else _
         url_key = f"{str(row.get('url', '')).replace('/', '_').replace(':', '')}_{row_idx}"
+        debug_run_id = str(row.get("run_id", "") or "legacy")
 
         with st.expander(f"{row['url']} - {row.get('selected_keyword', '')}"):
             # FAQs
@@ -1205,7 +1206,7 @@ if "results_df" in st.session_state:
                 value=debug_text,
                 height=400,
                 disabled=True,
-                key=f"debug_{url_key}"
+                key=f"debug_{debug_run_id}_{url_key}"
             )
 
     if skipped:
